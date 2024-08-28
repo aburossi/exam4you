@@ -68,7 +68,7 @@ def generate_mc_questions(content_text):
         {"role": "user", "content": user_prompt},
     ]
     try:
-        response = stream_llm_response(messages, model_params={"model": "gpt-4", "temperature": 0.5})
+        response = stream_llm_response(messages, model_params={"model": "gpt-4o-mini", "temperature": 0.5})
         return response, None
     except Exception as e:
         return None, str(e)
