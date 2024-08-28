@@ -14,10 +14,10 @@ __version__ = "1.2.0"
 def stream_llm_response(messages, model_params):
     client = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
     response = client.chat.completions.create(
-        model=model_params["model"] if "model" in model_params else "gpt-4o-mini",
+        model=model_params["model"] if "model" in model_params else "gpt-4",
         messages=messages,
-        temperature=model_params["temperature"] if "temperature" in model_params else 0.5,
-        max_tokens=12000,
+        temperature=model_params["temperature"] if "temperature" in model_params else 0.3,
+        max_tokens=4096,
     )
     return response.choices[0].message.content
 
@@ -68,7 +68,7 @@ def generate_mc_questions(content_text):
         {"role": "user", "content": user_prompt},
     ]
     try:
-        response = stream_llm_response(messages, model_params={"model": "gpt-4o-mini", "temperature": 0.5})
+        response = stream_llm_response(messages, model_params={"model": "gpt-4", "temperature": 0.5})
         return response, None
     except Exception as e:
         return None, str(e)
