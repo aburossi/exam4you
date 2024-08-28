@@ -14,10 +14,10 @@ __version__ = "1.2.0"
 def stream_llm_response(messages, model_params):
     client = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
     response = client.chat.completions.create(
-        model=model_params["model"] if "model" in model_params else "gpt-4",
+        model=model_params["model"] if "model" in model_params else "gpt-4o-mini",
         messages=messages,
-        temperature=model_params["temperature"] if "temperature" in model_params else 0.3,
-        max_tokens=4096,
+        temperature=model_params["temperature"] if "temperature" in model_params else 0.5,
+        max_tokens=12000,
     )
     return response.choices[0].message.content
 
