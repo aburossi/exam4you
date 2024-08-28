@@ -17,7 +17,7 @@ def stream_llm_response(messages, model_params):
         model=model_params["model"] if "model" in model_params else "gpt-4o-mini",
         messages=messages,
         temperature=model_params["temperature"] if "temperature" in model_params else 0.5,
-        max_tokens=12000,
+        max_tokens=10000,
     )
     return response.choices[0].message.content
 
