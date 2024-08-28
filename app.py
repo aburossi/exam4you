@@ -5,24 +5,15 @@ import json
 from PyPDF2 import PdfReader
 from fpdf import FPDF
 import io
+import zipfile
+import xml.etree.ElementTree as ET
+from PIL import Image
+import pytesseract
 
 # Set page config
 st.set_page_config(page_title="Exam Creator", page_icon="📝")
 
-__version__ = "1.3.1"
-
-# Check for optional dependencies
-try:
-    import docx
-    DOCX_AVAILABLE = True
-except ImportError:
-    DOCX_AVAILABLE = False
-
-try:
-    from pptx import Presentation
-    PPTX_AVAILABLE = True
-except ImportError:
-    PPTX_AVAILABLE = False
+__version__ = "1.5.0"
 
 # Main app functions
 def stream_llm_response(messages, model_params):
@@ -43,27 +34,35 @@ def extract_text_from_pdf(pdf_file):
     return text
 
 def extract_text_from_docx(docx_file):
-    if not DOCX_AVAILABLE:
-        raise ImportError("python-docx is not installed. Please install it to process DOCX files.")
-    doc = docx.Document(docx_file)
     text = ""
-    for para in doc.paragraphs:
-        text += para.text + "\n"
+    with zipfile.ZipFile(docx_file) as zf:
+        xml_content = zf.read('word/document.xml')
+        root = ET.fromstring(xml_content)
+        for elem in root.iter():
+            if elem.tag.endswith('}t'):
+                if elem.text:
+                    text += elem.text + "\n"
     return text
 
 def extract_text_from_pptx(pptx_file):
-    if not PPTX_AVAILABLE:
-        raise ImportError("python-pptx is not installed. Please install it to process PPTX files.")
-    prs = Presentation(pptx_file)
     text = ""
-    for slide in prs.slides:
-        for shape in slide.shapes:
-            if hasattr(shape, 'text'):
-                text += shape.text + "\n"
+    with zipfile.ZipFile(pptx_file) as zf:
+        for slide in sorted(filter(lambda name: name.startswith("ppt/slides/slide"), zf.namelist())):
+            xml_content = zf.read(slide)
+            root = ET.fromstring(xml_content)
+            for elem in root.iter():
+                if elem.tag.endswith('}t'):
+                    if elem.text:
+                        text += elem.text + "\n"
     return text
 
 def extract_text_from_txt(txt_file):
     return txt_file.getvalue().decode('utf-8')
+
+def extract_text_from_image(image_file):
+    image = Image.open(image_file)
+    text = pytesseract.image_to_string(image)
+    return text
 
 def extract_text_from_file(uploaded_file):
     file_extension = uploaded_file.name.split('.')[-1].lower()
@@ -75,6 +74,8 @@ def extract_text_from_file(uploaded_file):
         return extract_text_from_pptx(uploaded_file)
     elif file_extension == 'txt':
         return extract_text_from_txt(uploaded_file)
+    elif file_extension in ['png', 'jpg', 'jpeg']:
+        return extract_text_from_image(uploaded_file)
     else:
         raise ValueError(f"Unsupported file format: {file_extension}")
 
@@ -203,18 +204,9 @@ def file_upload_app():
     if 'messages' not in st.session_state:
         st.session_state.messages = []
     
-    allowed_types = ["pdf", "txt"]
-    if DOCX_AVAILABLE:
-        allowed_types.append("docx")
-    if PPTX_AVAILABLE:
-        allowed_types.append("pptx")
+    allowed_types = ["pdf", "txt", "docx", "pptx", "png", "jpg", "jpeg"]
     
     st.write(f"Supported file types: {', '.join(allowed_types)}")
-    
-    if not DOCX_AVAILABLE:
-        st.warning("DOCX support is not available. Install python-docx to enable DOCX processing.")
-    if not PPTX_AVAILABLE:
-        st.warning("PPTX support is not available. Install python-pptx to enable PPTX processing.")
     
     uploaded_file = st.file_uploader("Upload a document", type=allowed_types)
     if uploaded_file:
