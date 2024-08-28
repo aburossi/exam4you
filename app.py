@@ -52,10 +52,14 @@ def chunk_text(text, max_tokens=3000):
 
 def generate_mc_questions(content_text, api_key=st.secrets["OPENAI_API_KEY"]):
     prompt = (
-        "You are a professor in the field of Computational System Biology and should create an exam on the topic of the Input PDF. "
-        "Using the attached lecture slides (please analyze thoroughly), create a Master-level multiple-choice exam. The exam should contain multiple-choice and single-choice questions, "
-        "appropriately marked so that students know how many options to select. Create 30 realistic exam questions covering the entire content. Provide the output in JSON format. "
-        "The JSON should have the structure: [{'question': '...', 'choices': ['...'], 'correct_answer': '...', 'explanation': '...'}, ...]. Ensure the JSON is valid and properly formatted."
+"Sie sind ein Lehrer für Allgemeinbildung und sollen eine Prüfung zum Thema des eingereichten PDFs erstellen. "
+"Verwenden Sie den Inhalt des PDFs (bitte gründlich analysieren) und erstellen Sie eine Multiple-Choice-Prüfung auf Oberstufenniveau. "
+"Die Prüfung soll sowohl Fragen mit einer richtigen Antwort als auch Fragen mit mehreren richtigen Antworten enthalten. "
+"Kennzeichnen Sie die Fragen entsprechend, damit die Schüler wissen, wie viele Optionen sie auswählen sollen. "
+"Erstellen Sie so viele Prüfungsfragen, wie nötig sind, um den gesamten Inhalt abzudecken, aber maximal 20 Fragen. "
+"Geben Sie die Ausgabe im JSON-Format an. "
+"Das JSON sollte folgende Struktur haben: [{'question': '...', 'choices': ['...'], 'correct_answer': '...', 'explanation': '...'}, ...]. "
+"Stellen Sie sicher, dass das JSON gültig und korrekt formatiert ist."
     )
     messages = [
         {"role": "user", "content": content_text},
@@ -145,18 +149,7 @@ def main():
         """
         **SmartExam Creator** is an innovative tool designed to help students and educators alike. 
         Upload your lecture notes or handwritten notes to create personalized multiple-choice exams.
-        
-        **Story:**
-        This app was developed with the vision of making exam preparation easier and more interactive for students. 
-        Leveraging the power new AI models, it aims to transform traditional study methods into a more engaging and 
-        efficient process. Whether you're a student looking to test your knowledge or an educator seeking to create 
-        customized exams, SmartExam Creator is here to help.
-
-        **What makes SmartExam special ?**
-        Apart from other platforms that require costly subscriptions, this platform is designed from a STEM student
-        for all other students, but let us be honest, we do not have money for Subscriptions. That is why it is completely free for now.
-        I have designed the app as cost efficient as possible, so I can cover all business costs that are coming.  
-        
+               
         **Features:**
         - Upload PDF documents
         - Generate multiple-choice questions
@@ -164,8 +157,6 @@ def main():
         - Download generated exams as PDF
 
         Built with ❤️ using OpenAI's GPT-4o-mini.
-
-        **Connect with me on [LinkedIn](https://www.linkedin.com/in/laurin-herbst/).**
         """
     )
     
