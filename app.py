@@ -1,6 +1,6 @@
 import streamlit as st
 import time
-from openai import OpenAI
+import openai
 import json
 from PyPDF2 import PdfReader
 from fpdf import FPDF
@@ -12,14 +12,14 @@ __version__ = "1.2.0"
 
 # Main app functions
 def stream_llm_response(messages, model_params):
-    client = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
-    response = client.chat.completions.create(
+    openai.api_key = st.secrets["OPENAI_API_KEY"]
+    response = openai.ChatCompletion.create(
         model=model_params["model"] if "model" in model_params else "gpt-4o-mini",
         messages=messages,
         temperature=model_params["temperature"] if "temperature" in model_params else 0.5,
         max_tokens=12000,
     )
-    return response.choices[0].message.content
+    return response.choices[0].message['content']
 
 def extract_text_from_pdf(pdf_file):
     pdf_reader = PdfReader(pdf_file)
