@@ -8,11 +8,11 @@ from fpdf import FPDF
 # Set page config
 st.set_page_config(page_title="Exam Creator", page_icon="📝")
 
-__version__ = "1.2.0"
+__version__ = "1.2.1"
 
 # Main app functions
-def stream_llm_response(messages, model_params, api_key):
-    client = OpenAI(api_key=api_key)
+def stream_llm_response(messages, model_params):
+    client = OpenAI(api_key=st.secrets["openai_api_key"])
     response = client.chat.completions.create(
         model=model_params["model"] if "model" in model_params else "gpt-4",
         messages=messages,
@@ -42,7 +42,7 @@ def chunk_text(text, max_tokens=3000):
         chunks.append(chunk)
     return chunks
 
-def generate_mc_questions(content_text, api_key):
+def generate_mc_questions(content_text):
     system_prompt = (
         "Sie sind ein Lehrer für Allgemeinbildung und sollen eine Prüfung zum Thema des eingereichten PDFs erstellen. "
         "Verwenden Sie den Inhalt des PDFs (bitte gründlich analysieren) und erstellen Sie eine Multiple-Choice-Prüfung auf Oberstufenniveau. "
@@ -68,7 +68,7 @@ def generate_mc_questions(content_text, api_key):
         {"role": "user", "content": user_prompt},
     ]
     try:
-        response = stream_llm_response(messages, model_params={"model": "gpt-4o-mini", "temperature": 0.5}, api_key=api_key)
+        response = stream_llm_response(messages, model_params={"model": "gpt-4o-mini", "temperature": 0.5})
         return response, None
     except Exception as e:
         return None, str(e)
@@ -131,11 +131,8 @@ def main():
     app_mode_options = ["Upload PDF & Generate Questions", "Take the Quiz", "Download as PDF"]
     st.session_state.app_mode = st.sidebar.selectbox("Choose the app mode", app_mode_options, index=app_mode_options.index(st.session_state.app_mode))
     
-    # API Key input
-    api_key = st.text_input("Enter your OpenAI API Key:", type="password")
-    
     if st.session_state.app_mode == "Upload PDF & Generate Questions":
-        pdf_upload_app(api_key)
+        pdf_upload_app()
     elif st.session_state.app_mode == "Take the Quiz":
         if 'mc_test_generated' in st.session_state and st.session_state.mc_test_generated:
             if 'generated_questions' in st.session_state and st.session_state.generated_questions:
@@ -147,7 +144,7 @@ def main():
     elif st.session_state.app_mode == "Download as PDF":
         download_pdf_app()
 
-def pdf_upload_app(api_key):
+def pdf_upload_app():
     st.subheader("Upload Your Lecture - Create Your Test Exam")
     st.write("Show Us the Slides and We do the Rest")
 
@@ -157,7 +154,7 @@ def pdf_upload_app(api_key):
         st.session_state.messages = []
     
     uploaded_pdf = st.file_uploader("Upload a PDF document", type=["pdf"])
-    if uploaded_pdf and api_key:
+    if uploaded_pdf:
         pdf_text = extract_text_from_pdf(uploaded_pdf)
         content_text += pdf_text
         st.success("PDF content added to the session.")
@@ -170,7 +167,7 @@ def pdf_upload_app(api_key):
         chunks = chunk_text(content_text)
         questions = []
         for chunk in chunks:
-            response, error = generate_mc_questions(chunk, api_key)
+            response, error = generate_mc_questions(chunk)
             if error:
                 st.error(f"Error generating questions: {error}")
                 break
@@ -200,8 +197,6 @@ def pdf_upload_app(api_key):
             st.rerun()
         else:
             st.error("No questions were generated. Please check the error messages above and try again.")
-    elif not api_key:
-        st.warning("Please enter your OpenAI API key.")
     else:
         st.warning("Please upload a PDF to generate the interactive exam.")
 
