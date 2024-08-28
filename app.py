@@ -4,11 +4,15 @@ from openai import OpenAI
 import json
 from PyPDF2 import PdfReader
 from fpdf import FPDF
+import docx
+from pptx import Presentation
+import io
+
 
 # Set page config
 st.set_page_config(page_title="Exam Creator", page_icon="📝")
 
-__version__ = "1.2.0"
+__version__ = "1.3.0"
 
 # Main app functions
 def stream_llm_response(messages, model_params):
@@ -28,6 +32,38 @@ def extract_text_from_pdf(pdf_file):
         text += page.extract_text() + "\n"
     return text
 
+def extract_text_from_docx(docx_file):
+    doc = docx.Document(docx_file)
+    text = ""
+    for para in doc.paragraphs:
+        text += para.text + "\n"
+    return text
+
+def extract_text_from_pptx(pptx_file):
+    prs = Presentation(pptx_file)
+    text = ""
+    for slide in prs.slides:
+        for shape in slide.shapes:
+            if hasattr(shape, 'text'):
+                text += shape.text + "\n"
+    return text
+
+def extract_text_from_txt(txt_file):
+    return txt_file.getvalue().decode('utf-8')
+
+def extract_text_from_file(uploaded_file):
+    file_extension = uploaded_file.name.split('.')[-1].lower()
+    if file_extension == 'pdf':
+        return extract_text_from_pdf(uploaded_file)
+    elif file_extension == 'docx':
+        return extract_text_from_docx(uploaded_file)
+    elif file_extension == 'pptx':
+        return extract_text_from_pptx(uploaded_file)
+    elif file_extension == 'txt':
+        return extract_text_from_txt(uploaded_file)
+    else:
+        raise ValueError(f"Unsupported file format: {file_extension}")
+
 def chunk_text(text, max_tokens=3000):
     sentences = text.split('. ')
     chunks = []
@@ -41,6 +77,7 @@ def chunk_text(text, max_tokens=3000):
     if chunk:
         chunks.append(chunk)
     return chunks
+
 
 def generate_mc_questions(content_text):
     system_prompt = (
@@ -126,25 +163,25 @@ def main():
     st.title("Exam Creator")
     
     if "app_mode" not in st.session_state:
-        st.session_state.app_mode = "Upload PDF & Generate Questions"
+        st.session_state.app_mode = "Upload File & Generate Questions"
     
-    app_mode_options = ["Upload PDF & Generate Questions", "Take the Quiz", "Download as PDF"]
+    app_mode_options = ["Upload File & Generate Questions", "Take the Quiz", "Download as PDF"]
     st.session_state.app_mode = st.sidebar.selectbox("Choose the app mode", app_mode_options, index=app_mode_options.index(st.session_state.app_mode))
     
-    if st.session_state.app_mode == "Upload PDF & Generate Questions":
-        pdf_upload_app()
+    if st.session_state.app_mode == "Upload File & Generate Questions":
+        file_upload_app()
     elif st.session_state.app_mode == "Take the Quiz":
         if 'mc_test_generated' in st.session_state and st.session_state.mc_test_generated:
             if 'generated_questions' in st.session_state and st.session_state.generated_questions:
                 mc_quiz_app()
             else:
-                st.warning("No generated questions found. Please upload a PDF and generate questions first.")
+                st.warning("No generated questions found. Please upload a file and generate questions first.")
         else:
-            st.warning("Please upload a PDF and generate questions first.")
+            st.warning("Please upload a file and generate questions first.")
     elif st.session_state.app_mode == "Download as PDF":
         download_pdf_app()
 
-def pdf_upload_app():
+def file_upload_app():
     st.subheader("Upload Your Content - Create Your Test Exam")
     st.write("Upload the content and we take care of the rest")
 
@@ -153,52 +190,54 @@ def pdf_upload_app():
     if 'messages' not in st.session_state:
         st.session_state.messages = []
     
-    uploaded_pdf = st.file_uploader("Upload a PDF document", type=["pdf"])
-    if uploaded_pdf:
-        pdf_text = extract_text_from_pdf(uploaded_pdf)
-        content_text += pdf_text
-        st.success("PDF content added to the session.")
-        
-        # Display a sample of the extracted text for verification
-        st.subheader("Sample of extracted PDF content:")
-        st.text(content_text[:500] + "...")  # Display first 500 characters
+    uploaded_file = st.file_uploader("Upload a document", type=["pdf", "docx", "pptx", "txt"])
+    if uploaded_file:
+        try:
+            content_text = extract_text_from_file(uploaded_file)
+            st.success(f"{uploaded_file.name} content added to the session.")
+            
+            # Display a sample of the extracted text for verification
+            st.subheader("Sample of extracted content:")
+            st.text(content_text[:500] + "...")  # Display first 500 characters
 
-        st.info("Generating the exam from the uploaded content. It will take just a minute...")
-        chunks = chunk_text(content_text)
-        questions = []
-        for chunk in chunks:
-            response, error = generate_mc_questions(chunk)
-            if error:
-                st.error(f"Error generating questions: {error}")
-                break
-            parsed_questions, parse_error = parse_generated_questions(response)
-            if parse_error:
-                st.error(parse_error)
-                st.text("Full response:")
-                st.text(response)
-                break
-            if parsed_questions:
-                questions.extend(parsed_questions)
-                if len(questions) >= 20:
-                    questions = questions[:20]  # Limit to 20 questions
+            st.info("Generating the exam from the uploaded content. It will take just a minute...")
+            chunks = chunk_text(content_text)
+            questions = []
+            for chunk in chunks:
+                response, error = generate_mc_questions(chunk)
+                if error:
+                    st.error(f"Error generating questions: {error}")
                     break
-        if questions:
-            st.session_state.generated_questions = questions
-            st.session_state.content_text = content_text
-            st.session_state.mc_test_generated = True
-            st.success(f"The exam has been successfully created with {len(questions)} questions! Switch the Sidebar Panel to take the exam.")
-            
-            # Display a sample question for verification
-            st.subheader("Sample generated question:")
-            st.json(questions[0])
-            
-            time.sleep(2)
-            st.session_state.app_mode = "Take the Quiz"
-            st.rerun()
-        else:
-            st.error("No questions were generated. Please check the error messages above and try again.")
+                parsed_questions, parse_error = parse_generated_questions(response)
+                if parse_error:
+                    st.error(parse_error)
+                    st.text("Full response:")
+                    st.text(response)
+                    break
+                if parsed_questions:
+                    questions.extend(parsed_questions)
+                    if len(questions) >= 20:
+                        questions = questions[:20]  # Limit to 20 questions
+                        break
+            if questions:
+                st.session_state.generated_questions = questions
+                st.session_state.content_text = content_text
+                st.session_state.mc_test_generated = True
+                st.success(f"The exam has been successfully created with {len(questions)} questions! Switch the Sidebar Panel to take the exam.")
+                
+                # Display a sample question for verification
+                st.subheader("Sample generated question:")
+                st.json(questions[0])
+                
+                time.sleep(2)
+                st.session_state.app_mode = "Take the Quiz"
+                st.rerun()
+            else:
+                st.error("No questions were generated. Please check the error messages above and try again.")
+        except Exception as e:
+            st.error(f"An error occurred while processing the file: {str(e)}")
     else:
-        st.warning("Please upload a PDF to generate the interactive exam.")
+        st.warning("Please upload a file (PDF, DOCX, PPTX, or TXT) to generate the interactive exam.")
 
 def submit_answer(i, quiz_data):
     user_choice = st.session_state[f"user_choice_{i}"]
