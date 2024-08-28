@@ -125,20 +125,23 @@ def generate_pdf(questions):
 def submit_answer(i, quiz_data):
     user_choice = st.session_state.get(f"user_choice_{i}", [])
     if not isinstance(user_choice, list):
-        user_choice = [user_choice]
+        user_choice = [user_choice]  # Ensure it's always a list for uniformity
+    
+    # Convert both to sets to ignore order during comparison
+    correct_set = set(quiz_data['correct_answer'] if isinstance(quiz_data['correct_answer'], list) else [quiz_data['correct_answer']])
+    selected_set = set(user_choice)
+
     st.session_state.answers[i] = user_choice
 
-    if set(user_choice) == set(quiz_data['correct_answer']):
+    if selected_set == correct_set:
         st.session_state.feedback[i] = ("Correct", quiz_data.get('explanation', 'No explanation available'))
         st.session_state.correct_answers += 1
     else:
-        correct_set = set(quiz_data['correct_answer'])
-        selected_set = set(user_choice)
-        if correct_set.issubset(selected_set) and selected_set.issubset(correct_set):
+        if selected_set.issubset(correct_set) and correct_set.issubset(selected_set):
             feedback = "Partially correct"
         else:
             feedback = "Incorrect"
-        st.session_state.feedback[i] = (feedback, quiz_data.get('explanation', 'No explanation available'), quiz_data['correct_answer'])
+        st.session_state.feedback[i] = (feedback, quiz_data.get('explanation', 'No explanation available'), correct_set)
 
 def mc_quiz_app():
     st.subheader('Multiple Choice Exam')
@@ -165,9 +168,9 @@ def mc_quiz_app():
                 if feedback_type == "Correct":
                     st.success(st.session_state.feedback[i][0])
                 elif feedback_type == "Partially correct":
-                    st.warning(f"{st.session_state.feedback[i][0]} - Correct answer(s): {st.session_state.feedback[i][2]}")
+                    st.warning(f"{st.session_state.feedback[i][0]} - Correct answer(s): {', '.join(st.session_state.feedback[i][2])}")
                 else:
-                    st.error(f"{st.session_state.feedback[i][0]} - Correct answer(s): {st.session_state.feedback[i][2]}")
+                    st.error(f"{st.session_state.feedback[i][0]} - Correct answer(s): {', '.join(st.session_state.feedback[i][2])}")
                 
                 st.markdown(f"Explanation: {st.session_state.feedback[i][1]}")
 
@@ -180,6 +183,7 @@ def mc_quiz_app():
                     <h1>Your Score: {score}/{total_questions}</h1>
                 </div>
             """, unsafe_allow_html=True)
+
 
 def download_pdf_app():
     st.subheader('Download Your Exam as PDF')
