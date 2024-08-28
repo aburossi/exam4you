@@ -1,8 +1,6 @@
-streamlit==1.24.0
-openai==0.27.8
+streamlit==1.22.0
+openai==0.27.0
 PyPDF2==3.0.1
 fpdf==1.7.2
-python-docx==0.8.11
-python-pptx==0.6.21
-python-docx==0.8.11
-python-pptx==0.6.21
+Pillow==9.5.0
+pytesseract==0.3.10
