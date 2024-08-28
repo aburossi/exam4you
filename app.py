@@ -4,18 +4,20 @@ from openai import OpenAI
 import json
 from PyPDF2 import PdfReader
 from fpdf import FPDF
-import base64
 
-__version__ = "1.1.1"
+# Set page config
+st.set_page_config(page_title="Exam Creator", page_icon="📝")
+
+__version__ = "1.2.0"
 
 # Main app functions
-def stream_llm_response(messages, model_params, api_key):
-    client = OpenAI(api_key=api_key)
+def stream_llm_response(messages, model_params):
+    client = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
     response = client.chat.completions.create(
-        model=model_params["model"] if "model" in model_params else "gpt-4o",
+        model=model_params["model"] if "model" in model_params else "gpt-4o-mini",
         messages=messages,
-        temperature=model_params["temperature"] if "temperature" in model_params else 0.3,
-        max_tokens=4096,
+        temperature=model_params["temperature"] if "temperature" in model_params else 0.5,
+        max_tokens=12000,
     )
     return response.choices[0].message.content
 
@@ -25,16 +27,6 @@ def extract_text_from_pdf(pdf_file):
     for page in pdf_reader.pages:
         text += page.extract_text() + "\n"
     return text
-
-def summarize_text(text, api_key=st.secrets["OPENAI_API_KEY"]):
-    prompt = (
-        "Please summarize the following text to be concise and to the point:\n\n" + text
-    )
-    messages = [
-        {"role": "user", "content": prompt},
-    ]
-    summary = stream_llm_response(messages, model_params={"model": "gpt-4o-mini", "temperature": 0.3}, api_key=api_key)
-    return summary
 
 def chunk_text(text, max_tokens=3000):
     sentences = text.split('. ')
@@ -50,46 +42,51 @@ def chunk_text(text, max_tokens=3000):
         chunks.append(chunk)
     return chunks
 
-def generate_mc_questions(content_text, api_key=st.secrets["OPENAI_API_KEY"]):
-    prompt = (
-"Sie sind ein Lehrer für Allgemeinbildung und sollen eine Prüfung zum Thema des eingereichten PDFs erstellen. "
-"Verwenden Sie den Inhalt des PDFs (bitte gründlich analysieren) und erstellen Sie eine Multiple-Choice-Prüfung auf Oberstufenniveau. "
-"Die Prüfung soll sowohl Fragen mit einer richtigen Antwort als auch Fragen mit mehreren richtigen Antworten enthalten. "
-"Kennzeichnen Sie die Fragen entsprechend, damit die Schüler wissen, wie viele Optionen sie auswählen sollen. "
-"Erstellen Sie so viele Prüfungsfragen, wie nötig sind, um den gesamten Inhalt abzudecken, aber maximal 20 Fragen. "
-"Geben Sie die Ausgabe im JSON-Format an. "
-"Das JSON sollte folgende Struktur haben: [{'question': '...', 'choices': ['...'], 'correct_answer': '...', 'explanation': '...'}, ...]. "
-"Stellen Sie sicher, dass das JSON gültig und korrekt formatiert ist."
+def generate_mc_questions(content_text):
+    system_prompt = (
+        "Sie sind ein Lehrer für Allgemeinbildung und sollen eine Prüfung zum Thema des eingereichten PDFs erstellen. "
+        "Verwenden Sie den Inhalt des PDFs (bitte gründlich analysieren) und erstellen Sie eine Multiple-Choice-Prüfung auf Oberstufenniveau. "
+        "Die Prüfung soll sowohl Fragen mit einer richtigen Antwort als auch Fragen mit mehreren richtigen Antworten enthalten. "
+        "Kennzeichnen Sie die Fragen entsprechend, damit die Schüler wissen, wie viele Optionen sie auswählen sollen. "
+        "Erstellen Sie so viele Prüfungsfragen, wie nötig sind, um den gesamten Inhalt abzudecken, aber maximal 20 Fragen. "
+        "Geben Sie die Ausgabe im JSON-Format an. "
+        "Das JSON sollte folgende Struktur haben: [{'question': '...', 'choices': ['...'], 'correct_answer': '...', 'explanation': '...'}, ...]. "
+        "Stellen Sie sicher, dass das JSON gültig und korrekt formatiert ist."
     )
+    user_prompt = (
+        "Using the following content from the uploaded PDF, create multiple-choice and single-choice questions. "
+        "Ensure that each question is based on the information provided in the PDF content. "
+        "Mark questions appropriately so that students know how many options to select. "
+        "Create as many questions as necessary to cover the entire content, but no more than 20 questions. "
+        "Provide the output in JSON format with the following structure: "
+        "[{'question': '...', 'choices': ['...'], 'correct_answer': '...', 'explanation': '...'}, ...]. "
+        "Ensure the JSON is valid and properly formatted.\n\nPDF Content:\n\n"
+    ) + content_text
+
     messages = [
-        {"role": "user", "content": content_text},
-        {"role": "user", "content": prompt},
+        {"role": "system", "content": system_prompt},
+        {"role": "user", "content": user_prompt},
     ]
-    response = stream_llm_response(messages, model_params={"model": "gpt-4o-mini", "temperature": 0.3}, api_key=api_key)
-    return response
+    try:
+        response = stream_llm_response(messages, model_params={"model": "gpt-4o-mini", "temperature": 0.5})
+        return response, None
+    except Exception as e:
+        return None, str(e)
 
 def parse_generated_questions(response):
     try:
         json_start = response.find('[')
         json_end = response.rfind(']') + 1
+        if json_start == -1 or json_end == 0:
+            return None, f"No JSON data found in the response. First 500 characters of response:\n{response[:500]}..."
         json_str = response[json_start:json_end]
 
         questions = json.loads(json_str)
-        return questions
+        return questions, None
     except json.JSONDecodeError as e:
-        st.error(f"JSON parsing error: {e}")
-        st.error("Response from OpenAI:")
-        st.text(response)
-        return None
-
-def get_question(index, questions):
-    return questions[index]
-
-def initialize_session_state(questions):
-    session_state = st.session_state
-    session_state.current_question_index = 0
-    session_state.quiz_data = get_question(session_state.current_question_index, questions)
-    session_state.correct_answers = 0
+        return None, f"JSON parsing error: {e}\n\nFirst 500 characters of response:\n{response[:500]}..."
+    except Exception as e:
+        return None, f"Unexpected error: {str(e)}\n\nFirst 500 characters of response:\n{response[:500]}..."
 
 class PDF(FPDF):
     def header(self):
@@ -125,39 +122,14 @@ def generate_pdf(questions):
 
     return pdf.output(dest="S").encode("latin1")
 
-# Main app
 def main():
-    # Initialize app_mode if it doesn't exist
+    st.title("Exam Creator")
+    
     if "app_mode" not in st.session_state:
         st.session_state.app_mode = "Upload PDF & Generate Questions"
     
-    # Main app content
-    openai_models = [
-        "gpt-4o-mini",
-        "gpt-4-turbo",
-        "gpt-3.5-turbo-16k",
-    ]
-
-    st.sidebar.title("SmartExam Creator")
-    
     app_mode_options = ["Upload PDF & Generate Questions", "Take the Quiz", "Download as PDF"]
     st.session_state.app_mode = st.sidebar.selectbox("Choose the app mode", app_mode_options, index=app_mode_options.index(st.session_state.app_mode))
-    
-    st.sidebar.markdown("## About")
-    st.sidebar.info(
-        """
-        **SmartExam Creator** is an innovative tool designed to help students and educators alike. 
-        Upload your lecture notes or handwritten notes to create personalized multiple-choice exams.
-               
-        **Features:**
-        - Upload PDF documents
-        - Generate multiple-choice questions
-        - Take interactive quizzes
-        - Download generated exams as PDF
-
-        Built with ❤️ using OpenAI's GPT-4o-mini.
-        """
-    )
     
     if st.session_state.app_mode == "Upload PDF & Generate Questions":
         pdf_upload_app()
@@ -173,8 +145,8 @@ def main():
         download_pdf_app()
 
 def pdf_upload_app():
-    st.title("Upload Your Lecture - Create Your Test Exam")
-    st.subheader("Show Us the Slides and We do the Rest")
+    st.subheader("Upload Your Content - Create Your Test Exam")
+    st.write("Upload the content and we take care of the rest")
 
     content_text = ""
     
@@ -186,32 +158,45 @@ def pdf_upload_app():
         pdf_text = extract_text_from_pdf(uploaded_pdf)
         content_text += pdf_text
         st.success("PDF content added to the session.")
-    
-    if len(content_text) > 3000:
-        content_text = summarize_text(content_text)
+        
+        # Display a sample of the extracted text for verification
+        st.subheader("Sample of extracted PDF content:")
+        st.text(content_text[:500] + "...")  # Display first 500 characters
 
-    if content_text:
         st.info("Generating the exam from the uploaded content. It will take just a minute...")
         chunks = chunk_text(content_text)
         questions = []
         for chunk in chunks:
-            response = generate_mc_questions(chunk)
-            parsed_questions = parse_generated_questions(response)
+            response, error = generate_mc_questions(chunk)
+            if error:
+                st.error(f"Error generating questions: {error}")
+                break
+            parsed_questions, parse_error = parse_generated_questions(response)
+            if parse_error:
+                st.error(parse_error)
+                st.text("Full response:")
+                st.text(response)
+                break
             if parsed_questions:
                 questions.extend(parsed_questions)
+                if len(questions) >= 20:
+                    questions = questions[:20]  # Limit to 20 questions
+                    break
         if questions:
             st.session_state.generated_questions = questions
             st.session_state.content_text = content_text
             st.session_state.mc_test_generated = True
-            st.success("The game has been successfully created! Switch the Sidebar Panel to solve the exam.")
+            st.success(f"The exam has been successfully created with {len(questions)} questions! Switch the Sidebar Panel to take the exam.")
             
-            # Wait 2 seconds and switch to quiz mode
+            # Display a sample question for verification
+            st.subheader("Sample generated question:")
+            st.json(questions[0])
+            
             time.sleep(2)
             st.session_state.app_mode = "Take the Quiz"
             st.rerun()
-            
         else:
-            st.error("Failed to parse the generated questions. Please check the OpenAI response.")
+            st.error("No questions were generated. Please check the error messages above and try again.")
     else:
         st.warning("Please upload a PDF to generate the interactive exam.")
 
@@ -225,8 +210,8 @@ def submit_answer(i, quiz_data):
         st.session_state.feedback[i] = ("Incorrect", quiz_data.get('explanation', 'No explanation available'), quiz_data['correct_answer'])
 
 def mc_quiz_app():
-    st.title('Multiple Choice Game')
-    st.subheader('Here is always one correct answer per question')
+    st.subheader('Multiple Choice Exam')
+    st.write('There is always one correct answer per question')
 
     questions = st.session_state.generated_questions
 
@@ -261,7 +246,7 @@ def mc_quiz_app():
             """, unsafe_allow_html=True)
 
 def download_pdf_app():
-    st.title('Download Your Exam as PDF')
+    st.subheader('Download Your Exam as PDF')
 
     questions = st.session_state.generated_questions
 
