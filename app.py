@@ -1,13 +1,12 @@
 import streamlit as st
 import time
-from stqdm import stqdm
 from openai import OpenAI
 import json
 from PyPDF2 import PdfReader
 from fpdf import FPDF
 import base64
 
-__version__ = "1.1.0"
+__version__ = "1.1.1"
 
 # Main app functions
 def stream_llm_response(messages, model_params, api_key):
