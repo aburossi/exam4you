@@ -4,15 +4,25 @@ from openai import OpenAI
 import json
 from PyPDF2 import PdfReader
 from fpdf import FPDF
-import docx
-from pptx import Presentation
 import io
-
 
 # Set page config
 st.set_page_config(page_title="Exam Creator", page_icon="📝")
 
-__version__ = "1.3.0"
+__version__ = "1.3.1"
+
+# Check for optional dependencies
+try:
+    import docx
+    DOCX_AVAILABLE = True
+except ImportError:
+    DOCX_AVAILABLE = False
+
+try:
+    from pptx import Presentation
+    PPTX_AVAILABLE = True
+except ImportError:
+    PPTX_AVAILABLE = False
 
 # Main app functions
 def stream_llm_response(messages, model_params):
@@ -33,6 +43,8 @@ def extract_text_from_pdf(pdf_file):
     return text
 
 def extract_text_from_docx(docx_file):
+    if not DOCX_AVAILABLE:
+        raise ImportError("python-docx is not installed. Please install it to process DOCX files.")
     doc = docx.Document(docx_file)
     text = ""
     for para in doc.paragraphs:
@@ -40,6 +52,8 @@ def extract_text_from_docx(docx_file):
     return text
 
 def extract_text_from_pptx(pptx_file):
+    if not PPTX_AVAILABLE:
+        raise ImportError("python-pptx is not installed. Please install it to process PPTX files.")
     prs = Presentation(pptx_file)
     text = ""
     for slide in prs.slides:
@@ -78,7 +92,6 @@ def chunk_text(text, max_tokens=3000):
         chunks.append(chunk)
     return chunks
 
-
 def generate_mc_questions(content_text):
     system_prompt = (
         "Sie sind ein Lehrer für Allgemeinbildung und sollen eine Prüfung zum Thema des eingereichten PDFs erstellen. "
@@ -91,13 +104,13 @@ def generate_mc_questions(content_text):
         "Stellen Sie sicher, dass das JSON gültig und korrekt formatiert ist."
     )
     user_prompt = (
-        "Using the following content from the uploaded PDF, create multiple-choice and single-choice questions. "
-        "Ensure that each question is based on the information provided in the PDF content. "
+        "Using the following content from the uploaded file, create multiple-choice and single-choice questions. "
+        "Ensure that each question is based on the information provided in the file content. "
         "Mark questions appropriately so that students know how many options to select. "
         "Create as many questions as necessary to cover the entire content, but no more than 20 questions. "
         "Provide the output in JSON format with the following structure: "
         "[{'question': '...', 'choices': ['...'], 'correct_answer': '...', 'explanation': '...'}, ...]. "
-        "Ensure the JSON is valid and properly formatted.\n\nPDF Content:\n\n"
+        "Ensure the JSON is valid and properly formatted.\n\nFile Content:\n\n"
     ) + content_text
 
     messages = [
@@ -190,7 +203,20 @@ def file_upload_app():
     if 'messages' not in st.session_state:
         st.session_state.messages = []
     
-    uploaded_file = st.file_uploader("Upload a document", type=["pdf", "docx", "pptx", "txt"])
+    allowed_types = ["pdf", "txt"]
+    if DOCX_AVAILABLE:
+        allowed_types.append("docx")
+    if PPTX_AVAILABLE:
+        allowed_types.append("pptx")
+    
+    st.write(f"Supported file types: {', '.join(allowed_types)}")
+    
+    if not DOCX_AVAILABLE:
+        st.warning("DOCX support is not available. Install python-docx to enable DOCX processing.")
+    if not PPTX_AVAILABLE:
+        st.warning("PPTX support is not available. Install python-pptx to enable PPTX processing.")
+    
+    uploaded_file = st.file_uploader("Upload a document", type=allowed_types)
     if uploaded_file:
         try:
             content_text = extract_text_from_file(uploaded_file)
@@ -237,7 +263,7 @@ def file_upload_app():
         except Exception as e:
             st.error(f"An error occurred while processing the file: {str(e)}")
     else:
-        st.warning("Please upload a file (PDF, DOCX, PPTX, or TXT) to generate the interactive exam.")
+        st.warning(f"Please upload a file ({', '.join(allowed_types)}) to generate the interactive exam.")
 
 def submit_answer(i, quiz_data):
     user_choice = st.session_state[f"user_choice_{i}"]
