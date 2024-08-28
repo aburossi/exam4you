@@ -114,7 +114,7 @@ def generate_pdf(questions):
         choices = "\n".join(q['choices'])
         pdf.chapter_body(choices)
 
-        correct_answer = f"Correct answer: {q['correct_answer']}"
+        correct_answer = f"Correct answer: {', '.join(q['correct_answer']) if isinstance(q['correct_answer'], list) else q['correct_answer']}"
         pdf.chapter_body(correct_answer)
 
         explanation = f"Explanation: {q['explanation']}"
@@ -122,27 +122,86 @@ def generate_pdf(questions):
 
     return pdf.output(dest="S").encode("latin1")
 
-def main():
-    st.title("Exam Creator")
-    
-    if "app_mode" not in st.session_state:
-        st.session_state.app_mode = "Upload PDF & Generate Questions"
-    
-    app_mode_options = ["Upload PDF & Generate Questions", "Take the Quiz", "Download as PDF"]
-    st.session_state.app_mode = st.sidebar.selectbox("Choose the app mode", app_mode_options, index=app_mode_options.index(st.session_state.app_mode))
-    
-    if st.session_state.app_mode == "Upload PDF & Generate Questions":
-        pdf_upload_app()
-    elif st.session_state.app_mode == "Take the Quiz":
-        if 'mc_test_generated' in st.session_state and st.session_state.mc_test_generated:
-            if 'generated_questions' in st.session_state and st.session_state.generated_questions:
-                mc_quiz_app()
-            else:
-                st.warning("No generated questions found. Please upload a PDF and generate questions first.")
+def submit_answer(i, quiz_data):
+    user_choice = st.session_state.get(f"user_choice_{i}", [])
+    if not isinstance(user_choice, list):
+        user_choice = [user_choice]
+    st.session_state.answers[i] = user_choice
+
+    if set(user_choice) == set(quiz_data['correct_answer']):
+        st.session_state.feedback[i] = ("Correct", quiz_data.get('explanation', 'No explanation available'))
+        st.session_state.correct_answers += 1
+    else:
+        correct_set = set(quiz_data['correct_answer'])
+        selected_set = set(user_choice)
+        if correct_set.issubset(selected_set) and selected_set.issubset(correct_set):
+            feedback = "Partially correct"
         else:
-            st.warning("Please upload a PDF and generate questions first.")
-    elif st.session_state.app_mode == "Download as PDF":
-        download_pdf_app()
+            feedback = "Incorrect"
+        st.session_state.feedback[i] = (feedback, quiz_data.get('explanation', 'No explanation available'), quiz_data['correct_answer'])
+
+def mc_quiz_app():
+    st.subheader('Multiple Choice Exam')
+    st.write('Some questions may have one or more correct answers. Please select all that apply.')
+
+    questions = st.session_state.generated_questions
+
+    if questions:
+        if 'answers' not in st.session_state:
+            st.session_state.answers = [None] * len(questions)
+            st.session_state.feedback = [None] * len(questions)
+            st.session_state.correct_answers = 0
+
+        for i, quiz_data in enumerate(questions):
+            st.markdown(f"### Question {i+1}: {quiz_data['question']}")
+
+            if st.session_state.answers[i] is None:
+                user_choice = st.multiselect("Choose one or more answers:", quiz_data['choices'], key=f"user_choice_{i}")
+                st.button(f"Submit your answer {i+1}", key=f"submit_{i}", on_click=submit_answer, args=(i, quiz_data))
+            else:
+                st.multiselect("Choose one or more answers:", quiz_data['choices'], key=f"user_choice_{i}", default=st.session_state.answers[i], disabled=True)
+                
+                feedback_type = st.session_state.feedback[i][0]
+                if feedback_type == "Correct":
+                    st.success(st.session_state.feedback[i][0])
+                elif feedback_type == "Partially correct":
+                    st.warning(f"{st.session_state.feedback[i][0]} - Correct answer(s): {st.session_state.feedback[i][2]}")
+                else:
+                    st.error(f"{st.session_state.feedback[i][0]} - Correct answer(s): {st.session_state.feedback[i][2]}")
+                
+                st.markdown(f"Explanation: {st.session_state.feedback[i][1]}")
+
+        if all(answer is not None for answer in st.session_state.answers):
+            score = st.session_state.correct_answers
+            total_questions = len(questions)
+            st.write(f"""
+                <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh;">
+                    <h1 style="font-size: 3em; color: gold;">🏆</h1>
+                    <h1>Your Score: {score}/{total_questions}</h1>
+                </div>
+            """, unsafe_allow_html=True)
+
+def download_pdf_app():
+    st.subheader('Download Your Exam as PDF')
+
+    questions = st.session_state.generated_questions
+
+    if questions:
+        for i, q in enumerate(questions):
+            st.markdown(f"### Q{i+1}: {q['question']}")
+            for choice in q['choices']:
+                st.write(choice)
+            st.write(f"**Correct answer:** {', '.join(q['correct_answer']) if isinstance(q['correct_answer'], list) else q['correct_answer']}")
+            st.write(f"**Explanation:** {q['explanation']}")
+            st.write("---")
+
+        pdf_bytes = generate_pdf(questions)
+        st.download_button(
+            label="Download PDF",
+            data=pdf_bytes,
+            file_name="generated_exam.pdf",
+            mime="application/pdf"
+        )
 
 def pdf_upload_app():
     st.subheader("Upload Your Content - Create Your Test Exam")
@@ -200,72 +259,27 @@ def pdf_upload_app():
     else:
         st.warning("Please upload a PDF to generate the interactive exam.")
 
-def submit_answer(i, quiz_data):
-    user_choice = st.session_state[f"user_choice_{i}"]
-    st.session_state.answers[i] = user_choice
-    if user_choice == quiz_data['correct_answer']:
-        st.session_state.feedback[i] = ("Correct", quiz_data.get('explanation', 'No explanation available'))
-        st.session_state.correct_answers += 1
-    else:
-        st.session_state.feedback[i] = ("Incorrect", quiz_data.get('explanation', 'No explanation available'), quiz_data['correct_answer'])
-
-def mc_quiz_app():
-    st.subheader('Multiple Choice Exam')
-    st.write('There is always one correct answer per question')
-
-    questions = st.session_state.generated_questions
-
-    if questions:
-        if 'answers' not in st.session_state:
-            st.session_state.answers = [None] * len(questions)
-            st.session_state.feedback = [None] * len(questions)
-            st.session_state.correct_answers = 0
-
-        for i, quiz_data in enumerate(questions):
-            st.markdown(f"### Question {i+1}: {quiz_data['question']}")
-
-            if st.session_state.answers[i] is None:
-                user_choice = st.radio("Choose an answer:", quiz_data['choices'], key=f"user_choice_{i}")
-                st.button(f"Submit your answer {i+1}", key=f"submit_{i}", on_click=submit_answer, args=(i, quiz_data))
+def main():
+    st.title("Exam Creator")
+    
+    if "app_mode" not in st.session_state:
+        st.session_state.app_mode = "Upload PDF & Generate Questions"
+    
+    app_mode_options = ["Upload PDF & Generate Questions", "Take the Quiz", "Download as PDF"]
+    st.session_state.app_mode = st.sidebar.selectbox("Choose the app mode", app_mode_options, index=app_mode_options.index(st.session_state.app_mode))
+    
+    if st.session_state.app_mode == "Upload PDF & Generate Questions":
+        pdf_upload_app()
+    elif st.session_state.app_mode == "Take the Quiz":
+        if 'mc_test_generated' in st.session_state and st.session_state.mc_test_generated:
+            if 'generated_questions' in st.session_state and st.session_state.generated_questions:
+                mc_quiz_app()
             else:
-                st.radio("Choose an answer:", quiz_data['choices'], key=f"user_choice_{i}", index=quiz_data['choices'].index(st.session_state.answers[i]), disabled=True)
-                if st.session_state.feedback[i][0] == "Correct":
-                    st.success(st.session_state.feedback[i][0])
-                else:
-                    st.error(f"{st.session_state.feedback[i][0]} - Correct answer: {st.session_state.feedback[i][2]}")
-                st.markdown(f"Explanation: {st.session_state.feedback[i][1]}")
-
-        if all(answer is not None for answer in st.session_state.answers):
-            score = st.session_state.correct_answers
-            total_questions = len(questions)
-            st.write(f"""
-                <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh;">
-                    <h1 style="font-size: 3em; color: gold;">🏆</h1>
-                    <h1>Your Score: {score}/{total_questions}</h1>
-                </div>
-            """, unsafe_allow_html=True)
-
-def download_pdf_app():
-    st.subheader('Download Your Exam as PDF')
-
-    questions = st.session_state.generated_questions
-
-    if questions:
-        for i, q in enumerate(questions):
-            st.markdown(f"### Q{i+1}: {q['question']}")
-            for choice in q['choices']:
-                st.write(choice)
-            st.write(f"**Correct answer:** {q['correct_answer']}")
-            st.write(f"**Explanation:** {q['explanation']}")
-            st.write("---")
-
-        pdf_bytes = generate_pdf(questions)
-        st.download_button(
-            label="Download PDF",
-            data=pdf_bytes,
-            file_name="generated_exam.pdf",
-            mime="application/pdf"
-        )
+                st.warning("No generated questions found. Please upload a PDF and generate questions first.")
+        else:
+            st.warning("Please upload a PDF and generate questions first.")
+    elif st.session_state.app_mode == "Download as PDF":
+        download_pdf_app()
 
 if __name__ == '__main__':
     main()
