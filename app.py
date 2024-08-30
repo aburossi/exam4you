@@ -264,7 +264,7 @@ def main():
     if "app_mode" not in st.session_state:
         st.session_state.app_mode = "Upload PDF & Generate Questions"
     
-    app_mode_options = ["PDF hochladen & Fragen generieren", "Test durchführen", "Download PDF"]
+    app_mode_options = ["Upload PDF & Generate Questions", "Take the Quiz", "Download as PDF"]
     
     # Check if we should change the mode
     if 'should_change_mode' in st.session_state and st.session_state.should_change_mode:
