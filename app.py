@@ -101,6 +101,15 @@ class PDF(FPDF):
         self.multi_cell(0, 10, body)
         self.ln()
 
+    def print_checkbox(self, x, y, checked=False):
+        self.set_xy(x, y)
+        self.set_font('Symbol', '', 14)
+        if checked:
+            self.cell(5, 5, 'P', 1, 0, 'C')
+        else:
+            self.cell(5, 5, '', 1, 0, 'C')
+        self.set_font('Arial', '', 12)
+
 def generate_pdf(questions, include_answers=True):
     pdf = PDF()
     pdf.add_page()
@@ -123,9 +132,13 @@ def generate_pdf(questions, include_answers=True):
             pdf.print_checkbox(10, pdf.get_y(), True)
             pdf.cell(20, 5, "Test on paper")
             pdf.ln()
+        else:
+            # Print checkbox for "Test on paper" without checking it
+            pdf.print_checkbox(10, pdf.get_y(), False)
+            pdf.cell(20, 5, "Test on paper")
+            pdf.ln()
 
     return pdf.output(dest="S").encode("latin1")
-
 
 def submit_answer(i, quiz_data):
     user_choice = st.session_state.get(f"user_choice_{i}")
@@ -183,22 +196,11 @@ def download_pdf_app():
     questions = st.session_state.generated_questions
 
     if questions:
-        for i, q in enumerate(questions):
-            st.markdown(f"### Frage {i+1}: {q['question']}")
-            for choice in q['choices']:
-                st.write(choice)
-            st.write(f"**Richtige Antwort:** {q['correct_answer']}")
-            st.write(f"**Erklärung:** {q['explanation']}")
-            st.write("---")
-
-        pdf_type = st.radio("Wählen Sie die Ausgabe:", ["Mit Lösungen", "Ohne Lösungen"])
-        
         if st.button("PDF generieren"):
-            if pdf_type == "Mit Lösungen":
-                pdf_bytes = generate_pdf(questions, include_answers=True)
+            pdf_bytes = generate_pdf(questions, include_answers=st.session_state.app_mode == "Als PDF herunterladen (mit Lösungen)")
+            if st.session_state.app_mode == "Als PDF herunterladen (mit Lösungen)":
                 file_name = "prüfung_mit_antworten.pdf"
             else:
-                pdf_bytes = generate_pdf(questions, include_answers=False)
                 file_name = "prüfung_ohne_antworten.pdf"
             
             st.download_button(
@@ -258,8 +260,11 @@ def pdf_upload_app():
                     st.session_state.app_mode = "Prüfung ablegen"
                     st.experimental_rerun()
             with col2:
-                if st.button("Als PDF herunterladen"):
-                    st.session_state.app_mode = "Als PDF herunterladen"
+                if st.button("Als PDF herunterladen (mit Lösungen)"):
+                    st.session_state.app_mode = "Als PDF herunterladen (mit Lösungen)"
+                    st.experimental_rerun()
+                if st.button("Als PDF herunterladen (ohne Lösungen)"):
+                    st.session_state.app_mode = "Als PDF herunterladen (ohne Lösungen)"
                     st.experimental_rerun()
         else:
             st.error("Es wurden keine Fragen generiert. Bitte überprüfen Sie die obigen Fehlermeldungen und versuchen Sie es erneut.")
@@ -272,7 +277,7 @@ def main():
     if "app_mode" not in st.session_state:
         st.session_state.app_mode = "PDF hochladen & Fragen generieren"
     
-    app_mode_options = ["PDF hochladen & Fragen generieren", "Prüfung ablegen", "Als PDF herunterladen"]
+    app_mode_options = ["PDF hochladen & Fragen generieren", "Prüfung ablegen", "Als PDF herunterladen (mit Lösungen)", "Als PDF herunterladen (ohne Lösungen)"]
     
     st.session_state.app_mode = st.sidebar.selectbox("Wählen Sie den App-Modus", app_mode_options, index=app_mode_options.index(st.session_state.app_mode))
     
@@ -286,10 +291,8 @@ def main():
                 st.warning("Keine generierten Fragen gefunden. Bitte laden Sie zuerst ein PDF hoch und generieren Sie Fragen.")
         else:
             st.warning("Bitte laden Sie zuerst ein PDF hoch und generieren Sie Fragen.")
-    elif st.session_state.app_mode == "Als PDF herunterladen":
+    elif st.session_state.app_mode in ["Als PDF herunterladen (mit Lösungen)", "Als PDF herunterladen (ohne Lösungen)"]:
         download_pdf_app()
 
 if __name__ == '__main__':
     main()
-
-
