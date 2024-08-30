@@ -8,7 +8,7 @@ from fpdf import FPDF
 # Set page config
 st.set_page_config(page_title="Exam Creator", page_icon="📝")
 
-__version__ = "1.2.0"
+__version__ = "1.3.0"
 
 # Main app functions
 def stream_llm_response(messages, model_params):
@@ -45,18 +45,16 @@ def chunk_text(text, max_tokens=3000):
 def generate_mc_questions(content_text):
     system_prompt = (
         "Sie sind ein Lehrer für Allgemeinbildung und sollen eine Prüfung zum Thema des eingereichten PDFs erstellen. "
-        "Verwenden Sie den Inhalt des PDFs (bitte gründlich analysieren) und erstellen Sie eine Multiple-Choice-Prüfung auf Oberstufenniveau. "
-        "Die Prüfung soll sowohl Fragen mit einer richtigen Antwort als auch Fragen mit mehreren richtigen Antworten enthalten. "
-        "Kennzeichnen Sie die Fragen entsprechend, damit die Schüler wissen, wie viele Optionen sie auswählen sollen. "
+        "Verwenden Sie den Inhalt des PDFs (bitte gründlich analysieren) und erstellen Sie eine Single-Choice-Prüfung auf Oberstufenniveau. "
+        "Jede Frage soll genau eine richtige Antwort haben. "
         "Erstellen Sie so viele Prüfungsfragen, wie nötig sind, um den gesamten Inhalt abzudecken, aber maximal 20 Fragen. "
         "Geben Sie die Ausgabe im JSON-Format an. "
         "Das JSON sollte folgende Struktur haben: [{'question': '...', 'choices': ['...'], 'correct_answer': '...', 'explanation': '...'}, ...]. "
         "Stellen Sie sicher, dass das JSON gültig und korrekt formatiert ist."
     )
     user_prompt = (
-        "Using the following content from the uploaded PDF, create multiple-choice and single-choice questions. "
-        "Ensure that each question is based on the information provided in the PDF content. "
-        "Mark questions appropriately so that students know how many options to select. "
+        "Using the following content from the uploaded PDF, create single-choice questions. "
+        "Ensure that each question is based on the information provided in the PDF content and has exactly one correct answer. "
         "Create as many questions as necessary to cover the entire content, but no more than 20 questions. "
         "Provide the output in JSON format with the following structure: "
         "[{'question': '...', 'choices': ['...'], 'correct_answer': '...', 'explanation': '...'}, ...]. "
@@ -114,7 +112,7 @@ def generate_pdf(questions):
         choices = "\n".join(q['choices'])
         pdf.chapter_body(choices)
 
-        correct_answer = f"Correct answer: {', '.join(q['correct_answer']) if isinstance(q['correct_answer'], list) else q['correct_answer']}"
+        correct_answer = f"Correct answer: {q['correct_answer']}"
         pdf.chapter_body(correct_answer)
 
         explanation = f"Explanation: {q['explanation']}"
@@ -123,29 +121,19 @@ def generate_pdf(questions):
     return pdf.output(dest="S").encode("latin1")
 
 def submit_answer(i, quiz_data):
-    user_choice = st.session_state.get(f"user_choice_{i}", [])
-    if not isinstance(user_choice, list):
-        user_choice = [user_choice]  # Ensure it's always a list for uniformity
+    user_choice = st.session_state.get(f"user_choice_{i}")
     
-    # Convert both to sets to ignore order during comparison
-    correct_set = set(quiz_data['correct_answer'] if isinstance(quiz_data['correct_answer'], list) else [quiz_data['correct_answer']])
-    selected_set = set(user_choice)
-
     st.session_state.answers[i] = user_choice
 
-    if selected_set == correct_set:
+    if user_choice == quiz_data['correct_answer']:
         st.session_state.feedback[i] = ("Correct", quiz_data.get('explanation', 'No explanation available'))
         st.session_state.correct_answers += 1
     else:
-        if selected_set.issubset(correct_set) and correct_set.issubset(selected_set):
-            feedback = "Partially correct"
-        else:
-            feedback = "Incorrect"
-        st.session_state.feedback[i] = (feedback, quiz_data.get('explanation', 'No explanation available'), correct_set)
+        st.session_state.feedback[i] = ("Incorrect", quiz_data.get('explanation', 'No explanation available'), quiz_data['correct_answer'])
 
 def mc_quiz_app():
-    st.subheader('Multiple Choice Exam')
-    st.write('Some questions may have one or more correct answers. Please select all that apply.')
+    st.subheader('Single Choice Exam')
+    st.write('Please select one answer for each question.')
 
     questions = st.session_state.generated_questions
 
@@ -159,18 +147,16 @@ def mc_quiz_app():
             st.markdown(f"### Question {i+1}: {quiz_data['question']}")
 
             if st.session_state.answers[i] is None:
-                user_choice = st.multiselect("Choose one or more answers:", quiz_data['choices'], key=f"user_choice_{i}")
+                user_choice = st.radio("Choose one answer:", quiz_data['choices'], key=f"user_choice_{i}")
                 st.button(f"Submit your answer {i+1}", key=f"submit_{i}", on_click=submit_answer, args=(i, quiz_data))
             else:
-                st.multiselect("Choose one or more answers:", quiz_data['choices'], key=f"user_choice_{i}", default=st.session_state.answers[i], disabled=True)
+                st.radio("Choose one answer:", quiz_data['choices'], key=f"user_choice_{i}", index=quiz_data['choices'].index(st.session_state.answers[i]), disabled=True)
                 
                 feedback_type = st.session_state.feedback[i][0]
                 if feedback_type == "Correct":
                     st.success(st.session_state.feedback[i][0])
-                elif feedback_type == "Partially correct":
-                    st.warning(f"{st.session_state.feedback[i][0]} - Correct answer(s): {', '.join(st.session_state.feedback[i][2])}")
                 else:
-                    st.error(f"{st.session_state.feedback[i][0]} - Correct answer(s): {', '.join(st.session_state.feedback[i][2])}")
+                    st.error(f"{st.session_state.feedback[i][0]} - Correct answer: {st.session_state.feedback[i][2]}")
                 
                 st.markdown(f"Explanation: {st.session_state.feedback[i][1]}")
 
@@ -184,7 +170,6 @@ def mc_quiz_app():
                 </div>
             """, unsafe_allow_html=True)
 
-
 def download_pdf_app():
     st.subheader('Download Your Exam as PDF')
 
@@ -195,7 +180,7 @@ def download_pdf_app():
             st.markdown(f"### Q{i+1}: {q['question']}")
             for choice in q['choices']:
                 st.write(choice)
-            st.write(f"**Correct answer:** {', '.join(q['correct_answer']) if isinstance(q['correct_answer'], list) else q['correct_answer']}")
+            st.write(f"**Correct answer:** {q['correct_answer']}")
             st.write(f"**Explanation:** {q['explanation']}")
             st.write("---")
 
