@@ -144,7 +144,7 @@ def mc_quiz_app():
             st.session_state.correct_answers = 0
 
         for i, quiz_data in enumerate(questions):
-            st.markdown(f"### Question {i+1}: {quiz_data['question']}")
+            st.markdown(f"### Frage {i+1}: {quiz_data['question']}")
 
             if st.session_state.answers[i] is None:
                 user_choice = st.radio("Choose one answer:", quiz_data['choices'], key=f"user_choice_{i}")
