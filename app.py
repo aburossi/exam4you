@@ -240,9 +240,8 @@ def pdf_upload_app():
             st.subheader("Sample generated question:")
             st.json(questions[0])
             
-            time.sleep(2)
-            st.session_state.app_mode = "Take the Quiz"
-            st.rerun()
+            # Instead of using st.rerun(), we'll set a flag in the session state
+            st.session_state.should_change_mode = True
         else:
             st.error("No questions were generated. Please check the error messages above and try again.")
     else:
@@ -255,6 +254,12 @@ def main():
         st.session_state.app_mode = "Upload PDF & Generate Questions"
     
     app_mode_options = ["Upload PDF & Generate Questions", "Take the Quiz", "Download as PDF"]
+    
+    # Check if we should change the mode
+    if 'should_change_mode' in st.session_state and st.session_state.should_change_mode:
+        st.session_state.app_mode = "Take the Quiz"
+        st.session_state.should_change_mode = False  # Reset the flag
+    
     st.session_state.app_mode = st.sidebar.selectbox("Choose the app mode", app_mode_options, index=app_mode_options.index(st.session_state.app_mode))
     
     if st.session_state.app_mode == "Upload PDF & Generate Questions":
