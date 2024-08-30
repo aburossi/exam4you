@@ -174,8 +174,6 @@ def mc_quiz_app():
 def download_pdf_app():
     st.subheader('Lade die Prüfung als PDF herunter')
 
-    questions = st.session_state.generated_questions
-
     if questions:
         for i, q in enumerate(questions):
             st.markdown(f"### Frage {i+1}: {q['question']}")
@@ -201,6 +199,8 @@ def download_pdf_app():
                 file_name=file_name,
                 mime="application/pdf"
             )
+
+    questions = st.session_state.generated_questions
 
 
 def pdf_upload_app():
