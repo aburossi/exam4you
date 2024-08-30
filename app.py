@@ -101,15 +101,6 @@ class PDF(FPDF):
         self.multi_cell(0, 10, body)
         self.ln()
 
-    def print_checkbox(self, x, y, checked=False):
-        self.set_xy(x, y)
-        self.set_font('Symbol', '', 14)
-        if checked:
-            self.cell(5, 5, 'P', 1, 0, 'C')
-        else:
-            self.cell(5, 5, '', 1, 0, 'C')
-        self.set_font('Arial', '', 12)
-
 def generate_pdf(questions, include_answers=True):
     pdf = PDF()
     pdf.add_page()
@@ -118,16 +109,23 @@ def generate_pdf(questions, include_answers=True):
         question = f"Q{i+1}: {q['question']}"
         pdf.chapter_title(question)
 
-        for j, choice in enumerate(q['choices']):
-            pdf.print_checkbox(10, pdf.get_y(), j == q['choices'].index(q['correct_answer']))
-            pdf.cell(20, 5, choice)
-            pdf.ln()
+        choices = "\n".join(q['choices'])
+        pdf.chapter_body(choices)
 
         if include_answers:
-            pdf.chapter_body(f"Correct answer: {q['correct_answer']}")
-            pdf.chapter_body(f"Explanation: {q['explanation']}")
+            correct_answer = f"Correct answer: {q['correct_answer']}"
+            pdf.chapter_body(correct_answer)
+
+            explanation = f"Explanation: {q['explanation']}"
+            pdf.chapter_body(explanation)
+
+            # Print checkbox for "Test on paper"
+            pdf.print_checkbox(10, pdf.get_y(), True)
+            pdf.cell(20, 5, "Test on paper")
+            pdf.ln()
 
     return pdf.output(dest="S").encode("latin1")
+
 
 def submit_answer(i, quiz_data):
     user_choice = st.session_state.get(f"user_choice_{i}")
@@ -185,12 +183,28 @@ def download_pdf_app():
     questions = st.session_state.generated_questions
 
     if questions:
+        for i, q in enumerate(questions):
+            st.markdown(f"### Frage {i+1}: {q['question']}")
+            for choice in q['choices']:
+                st.write(choice)
+            st.write(f"**Richtige Antwort:** {q['correct_answer']}")
+            st.write(f"**Erklärung:** {q['explanation']}")
+            st.write("---")
+
+        pdf_type = st.radio("Wählen Sie die Ausgabe:", ["Mit Lösungen", "Ohne Lösungen"])
+        
         if st.button("PDF generieren"):
-            pdf_bytes = generate_pdf(questions, include_answers=True)
+            if pdf_type == "Mit Lösungen":
+                pdf_bytes = generate_pdf(questions, include_answers=True)
+                file_name = "prüfung_mit_antworten.pdf"
+            else:
+                pdf_bytes = generate_pdf(questions, include_answers=False)
+                file_name = "prüfung_ohne_antworten.pdf"
+            
             st.download_button(
                 label="PDF herunterladen",
                 data=pdf_bytes,
-                file_name="prüfung_mit_antworten.pdf",
+                file_name=file_name,
                 mime="application/pdf"
             )
 
@@ -277,3 +291,4 @@ def main():
 
 if __name__ == '__main__':
     main()
+
