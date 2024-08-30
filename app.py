@@ -113,10 +113,10 @@ def generate_pdf(questions, include_answers=True):
         pdf.chapter_body(choices)
 
         if include_answers:
-            correct_answer = f"Correct answer: {q['correct_answer']}"
+            correct_answer = f"Richtige Antwort: {q['correct_answer']}"
             pdf.chapter_body(correct_answer)
 
-            explanation = f"Explanation: {q['explanation']}"
+            explanation = f"Erklärung: {q['explanation']}"
             pdf.chapter_body(explanation)
 
     return pdf.output(dest="S").encode("latin1")
@@ -127,14 +127,14 @@ def submit_answer(i, quiz_data):
     st.session_state.answers[i] = user_choice
 
     if user_choice == quiz_data['correct_answer']:
-        st.session_state.feedback[i] = ("Correct", quiz_data.get('explanation', 'No explanation available'))
+        st.session_state.feedback[i] = ("Richtig", quiz_data.get('explanation', 'No explanation available'))
         st.session_state.correct_answers += 1
     else:
-        st.session_state.feedback[i] = ("Incorrect", quiz_data.get('explanation', 'No explanation available'), quiz_data['correct_answer'])
+        st.session_state.feedback[i] = ("Falsch", quiz_data.get('explanation', 'No explanation available'), quiz_data['correct_answer'])
 
 def mc_quiz_app():
-    st.subheader('Single Choice Exam')
-    st.write('Please select one answer for each question.')
+    st.subheader('Prüfungsfragen')
+    st.write('Wählen Sie die richtige Antwort für jede Frage.')
 
     questions = st.session_state.generated_questions
 
