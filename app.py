@@ -148,7 +148,7 @@ def mc_quiz_app():
 
             if st.session_state.answers[i] is None:
                 user_choice = st.radio("Wählen Sie die richtige Antwort:", quiz_data['choices'], key=f"user_choice_{i}")
-                st.button(f"Submit your answer {i+1}", key=f"submit_{i}", on_click=submit_answer, args=(i, quiz_data))
+                st.button(f"Überprüfen Antwort {i+1}", key=f"submit_{i}", on_click=submit_answer, args=(i, quiz_data))
             else:
                 st.radio("Choose one answer:", quiz_data['choices'], key=f"user_choice_{i}", index=quiz_data['choices'].index(st.session_state.answers[i]), disabled=True)
                 
