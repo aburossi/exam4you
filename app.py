@@ -119,7 +119,13 @@ def generate_pdf(questions, include_answers=True):
             explanation = f"Explanation: {q['explanation']}"
             pdf.chapter_body(explanation)
 
+            # Print checkbox for "Test on paper"
+            pdf.print_checkbox(10, pdf.get_y(), True)
+            pdf.cell(20, 5, "Test on paper")
+            pdf.ln()
+
     return pdf.output(dest="S").encode("latin1")
+
 
 def submit_answer(i, quiz_data):
     user_choice = st.session_state.get(f"user_choice_{i}")
