@@ -101,7 +101,7 @@ class PDF(FPDF):
         self.multi_cell(0, 10, body)
         self.ln()
 
-def generate_pdf(questions):
+def generate_pdf(questions, include_answers=True):
     pdf = PDF()
     pdf.add_page()
 
@@ -112,11 +112,12 @@ def generate_pdf(questions):
         choices = "\n".join(q['choices'])
         pdf.chapter_body(choices)
 
-        correct_answer = f"Correct answer: {q['correct_answer']}"
-        pdf.chapter_body(correct_answer)
+        if include_answers:
+            correct_answer = f"Correct answer: {q['correct_answer']}"
+            pdf.chapter_body(correct_answer)
 
-        explanation = f"Explanation: {q['explanation']}"
-        pdf.chapter_body(explanation)
+            explanation = f"Explanation: {q['explanation']}"
+            pdf.chapter_body(explanation)
 
     return pdf.output(dest="S").encode("latin1")
 
@@ -184,13 +185,23 @@ def download_pdf_app():
             st.write(f"**Erklärung:** {q['explanation']}")
             st.write("---")
 
-        pdf_bytes = generate_pdf(questions)
-        st.download_button(
-            label="Download PDF",
-            data=pdf_bytes,
-            file_name="generated_exam.pdf",
-            mime="application/pdf"
-        )
+        pdf_type = st.radio("Choose PDF type:", ["With answers (for teachers)", "Without answers (for students)"])
+        
+        if st.button("Generate PDF"):
+            if pdf_type == "With answers (for teachers)":
+                pdf_bytes = generate_pdf(questions, include_answers=True)
+                file_name = "exam_with_answers.pdf"
+            else:
+                pdf_bytes = generate_pdf(questions, include_answers=False)
+                file_name = "exam_without_answers.pdf"
+            
+            st.download_button(
+                label="Download PDF",
+                data=pdf_bytes,
+                file_name=file_name,
+                mime="application/pdf"
+            )
+
 
 def pdf_upload_app():
     st.subheader("Upload Your Content - Create Your Test Exam")
