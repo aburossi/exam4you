@@ -211,7 +211,7 @@ def pdf_upload_app():
         st.subheader("Sample of extracted PDF content:")
         st.text(content_text[:500] + "...")  # Display first 500 characters
 
-        st.info("Generating the exam from the uploaded content. It will take just a minute...")
+        st.info("Ich erstelle die Prüfung aus den hochgeladenen Inhalten. Dies dauert nur eine Minute.....")
         chunks = chunk_text(content_text)
         questions = []
         for chunk in chunks:
@@ -234,7 +234,7 @@ def pdf_upload_app():
             st.session_state.generated_questions = questions
             st.session_state.content_text = content_text
             st.session_state.mc_test_generated = True
-            st.success(f"The exam has been successfully created with {len(questions)} questions! Switch the Sidebar Panel to take the exam.")
+            st.success(f"Die Prüfung wurde erfolgreich mit {len(questions)} Fragen erstellt! Wechseln Sie zur Seitenleiste links, um die Prüfung zu starten oder ein PDF zu generieren.")
             
             # Display a sample question for verification
             st.subheader("Sample generated question:")
