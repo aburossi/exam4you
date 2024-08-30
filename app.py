@@ -244,14 +244,17 @@ def pdf_upload_app():
             st.session_state.generated_questions = questions
             st.session_state.content_text = content_text
             st.session_state.mc_test_generated = True
-            st.success(f"Die Prüfung wurde erfolgreich mit {len(questions)} Fragen erstellt! Wechseln Sie zur Seitenleiste links, um die Prüfung zu starten oder ein PDF zu generieren.")
+            st.success(f"Die Prüfung wurde erfolgreich mit {len(questions)} Fragen erstellt!")
             
-            # Display a sample question for verification
-            st.subheader("Beispiel einer generierten Frage:")
-            st.json(questions[0])
-            
-            # Instead of using st.rerun(), we'll set a flag in the session state
-            st.session_state.should_change_mode = True
+            col1, col2 = st.columns(2)
+            with col1:
+                if st.button("Prüfung ablegen"):
+                    st.session_state.app_mode = "Prüfung ablegen"
+                    st.experimental_rerun()
+            with col2:
+                if st.button("Als PDF herunterladen"):
+                    st.session_state.app_mode = "Als PDF herunterladen"
+                    st.experimental_rerun()
         else:
             st.error("Es wurden keine Fragen generiert. Bitte überprüfen Sie die obigen Fehlermeldungen und versuchen Sie es erneut.")
     else:
@@ -264,11 +267,6 @@ def main():
         st.session_state.app_mode = "PDF hochladen & Fragen generieren"
     
     app_mode_options = ["PDF hochladen & Fragen generieren", "Prüfung ablegen", "Als PDF herunterladen"]
-    
-    # Check if we should change the mode
-    if 'should_change_mode' in st.session_state and st.session_state.should_change_mode:
-        st.session_state.app_mode = "Prüfung ablegen"
-        st.session_state.should_change_mode = False  # Reset the flag
     
     st.session_state.app_mode = st.sidebar.selectbox("Wählen Sie den App-Modus", app_mode_options, index=app_mode_options.index(st.session_state.app_mode))
     
@@ -287,3 +285,5 @@ def main():
 
 if __name__ == '__main__':
     main()
+
+
