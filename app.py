@@ -127,14 +127,14 @@ def submit_answer(i, quiz_data):
     st.session_state.answers[i] = user_choice
 
     if user_choice == quiz_data['correct_answer']:
-        st.session_state.feedback[i] = ("Correct", quiz_data.get('explanation', 'No explanation available'))
+        st.session_state.feedback[i] = ("Richtig", quiz_data.get('explanation', 'Keine Erklärung verfügbar'))
         st.session_state.correct_answers += 1
     else:
-        st.session_state.feedback[i] = ("Incorrect", quiz_data.get('explanation', 'No explanation available'), quiz_data['correct_answer'])
+        st.session_state.feedback[i] = ("Falsch", quiz_data.get('explanation', 'Keine Erklärung verfügbar'), quiz_data['correct_answer'])
 
 def mc_quiz_app():
-    st.subheader('Single Choice Exam')
-    st.write('Please select one answer for each question.')
+    st.subheader('Single-Choice-Prüfung')
+    st.write('Bitte wählen Sie eine Antwort für jede Frage.')
 
     questions = st.session_state.generated_questions
 
@@ -149,17 +149,17 @@ def mc_quiz_app():
 
             if st.session_state.answers[i] is None:
                 user_choice = st.radio("Wählen Sie die richtige Antwort:", quiz_data['choices'], key=f"user_choice_{i}")
-                st.button(f"Überprüfen Antwort {i+1}", key=f"submit_{i}", on_click=submit_answer, args=(i, quiz_data))
+                st.button(f"Antwort {i+1} überprüfen", key=f"submit_{i}", on_click=submit_answer, args=(i, quiz_data))
             else:
-                st.radio("Choose one answer:", quiz_data['choices'], key=f"user_choice_{i}", index=quiz_data['choices'].index(st.session_state.answers[i]), disabled=True)
+                st.radio("Wählen Sie eine Antwort:", quiz_data['choices'], key=f"user_choice_{i}", index=quiz_data['choices'].index(st.session_state.answers[i]), disabled=True)
                 
                 feedback_type = st.session_state.feedback[i][0]
-                if feedback_type == "Correct":
+                if feedback_type == "Richtig":
                     st.success(st.session_state.feedback[i][0])
                 else:
-                    st.error(f"{st.session_state.feedback[i][0]} - Correct answer: {st.session_state.feedback[i][2]}")
+                    st.error(f"{st.session_state.feedback[i][0]} - Richtige Antwort: {st.session_state.feedback[i][2]}")
                 
-                st.markdown(f"Explanation: {st.session_state.feedback[i][1]}")
+                st.markdown(f"Erklärung: {st.session_state.feedback[i][1]}")
 
         if all(answer is not None for answer in st.session_state.answers):
             score = st.session_state.correct_answers
@@ -167,12 +167,12 @@ def mc_quiz_app():
             st.write(f"""
                 <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh;">
                     <h1 style="font-size: 3em; color: gold;">🏆</h1>
-                    <h1>Your Score: {score}/{total_questions}</h1>
+                    <h1>Ihr Ergebnis: {score}/{total_questions}</h1>
                 </div>
             """, unsafe_allow_html=True)
 
 def download_pdf_app():
-    st.subheader('Lade die Prüfung als PDF herunter')
+    st.subheader('Prüfung als PDF herunterladen')
 
     questions = st.session_state.generated_questions
 
@@ -181,45 +181,44 @@ def download_pdf_app():
             st.markdown(f"### Frage {i+1}: {q['question']}")
             for choice in q['choices']:
                 st.write(choice)
-            st.write(f"**Correct answer:** {q['correct_answer']}")
+            st.write(f"**Richtige Antwort:** {q['correct_answer']}")
             st.write(f"**Erklärung:** {q['explanation']}")
             st.write("---")
 
-        pdf_type = st.radio("Wähle die Ausgabe:", ["Mit Lösungen", "Ohne Lösungen"])
+        pdf_type = st.radio("Wählen Sie die Ausgabe:", ["Mit Lösungen", "Ohne Lösungen"])
         
-        if st.button("Generate PDF"):
+        if st.button("PDF generieren"):
             if pdf_type == "Mit Lösungen":
                 pdf_bytes = generate_pdf(questions, include_answers=True)
-                file_name = "exam_with_answers.pdf"
+                file_name = "prüfung_mit_antworten.pdf"
             else:
                 pdf_bytes = generate_pdf(questions, include_answers=False)
-                file_name = "exam_without_answers.pdf"
+                file_name = "prüfung_ohne_antworten.pdf"
             
             st.download_button(
-                label="Download PDF",
+                label="PDF herunterladen",
                 data=pdf_bytes,
                 file_name=file_name,
                 mime="application/pdf"
             )
 
-
 def pdf_upload_app():
-    st.subheader("Upload Your Content - Create Your Test Exam")
-    st.write("Upload the content and we take care of the rest")
+    st.subheader("Laden Sie Ihren Inhalt hoch - Erstellen Sie Ihre Testprüfung")
+    st.write("Laden Sie den Inhalt hoch und wir kümmern uns um den Rest")
 
     content_text = ""
     
     if 'messages' not in st.session_state:
         st.session_state.messages = []
     
-    uploaded_pdf = st.file_uploader("Upload a PDF document", type=["pdf"])
+    uploaded_pdf = st.file_uploader("Laden Sie ein PDF-Dokument hoch", type=["pdf"])
     if uploaded_pdf:
         pdf_text = extract_text_from_pdf(uploaded_pdf)
         content_text += pdf_text
-        st.success("PDF content added to the session.")
+        st.success("PDF-Inhalt zur Sitzung hinzugefügt.")
         
         # Display a sample of the extracted text for verification
-        st.subheader("Sample of extracted PDF content:")
+        st.subheader("Beispiel des extrahierten PDF-Inhalts:")
         st.text(content_text[:500] + "...")  # Display first 500 characters
 
         st.info("Ich erstelle die Prüfung aus den hochgeladenen Inhalten. Dies dauert nur eine Minute.....")
@@ -228,12 +227,12 @@ def pdf_upload_app():
         for chunk in chunks:
             response, error = generate_mc_questions(chunk)
             if error:
-                st.error(f"Error generating questions: {error}")
+                st.error(f"Fehler beim Generieren der Fragen: {error}")
                 break
             parsed_questions, parse_error = parse_generated_questions(response)
             if parse_error:
                 st.error(parse_error)
-                st.text("Full response:")
+                st.text("Vollständige Antwort:")
                 st.text(response)
                 break
             if parsed_questions:
@@ -248,42 +247,42 @@ def pdf_upload_app():
             st.success(f"Die Prüfung wurde erfolgreich mit {len(questions)} Fragen erstellt! Wechseln Sie zur Seitenleiste links, um die Prüfung zu starten oder ein PDF zu generieren.")
             
             # Display a sample question for verification
-            st.subheader("Sample generated question:")
+            st.subheader("Beispiel einer generierten Frage:")
             st.json(questions[0])
             
             # Instead of using st.rerun(), we'll set a flag in the session state
             st.session_state.should_change_mode = True
         else:
-            st.error("No questions were generated. Please check the error messages above and try again.")
+            st.error("Es wurden keine Fragen generiert. Bitte überprüfen Sie die obigen Fehlermeldungen und versuchen Sie es erneut.")
     else:
-        st.warning("Please upload a PDF to generate the interactive exam.")
+        st.warning("Bitte laden Sie ein PDF hoch, um die interaktive Prüfung zu generieren.")
 
 def main():
-    st.title("Exam Creator")
+    st.title("Prüfungsersteller")
     
     if "app_mode" not in st.session_state:
-        st.session_state.app_mode = "Upload PDF & Generate Questions"
+        st.session_state.app_mode = "PDF hochladen & Fragen generieren"
     
-    app_mode_options = ["Upload PDF & Generate Questions", "Take the Quiz", "Download as PDF"]
+    app_mode_options = ["PDF hochladen & Fragen generieren", "Prüfung ablegen", "Als PDF herunterladen"]
     
     # Check if we should change the mode
     if 'should_change_mode' in st.session_state and st.session_state.should_change_mode:
-        st.session_state.app_mode = "Take the Quiz"
+        st.session_state.app_mode = "Prüfung ablegen"
         st.session_state.should_change_mode = False  # Reset the flag
     
-    st.session_state.app_mode = st.sidebar.selectbox("Choose the app mode", app_mode_options, index=app_mode_options.index(st.session_state.app_mode))
+    st.session_state.app_mode = st.sidebar.selectbox("Wählen Sie den App-Modus", app_mode_options, index=app_mode_options.index(st.session_state.app_mode))
     
-    if st.session_state.app_mode == "Upload PDF & Generate Questions":
+    if st.session_state.app_mode == "PDF hochladen & Fragen generieren":
         pdf_upload_app()
-    elif st.session_state.app_mode == "Take the Quiz":
+    elif st.session_state.app_mode == "Prüfung ablegen":
         if 'mc_test_generated' in st.session_state and st.session_state.mc_test_generated:
             if 'generated_questions' in st.session_state and st.session_state.generated_questions:
                 mc_quiz_app()
             else:
-                st.warning("No generated questions found. Please upload a PDF and generate questions first.")
+                st.warning("Keine generierten Fragen gefunden. Bitte laden Sie zuerst ein PDF hoch und generieren Sie Fragen.")
         else:
-            st.warning("Please upload a PDF and generate questions first.")
-    elif st.session_state.app_mode == "Download as PDF":
+            st.warning("Bitte laden Sie zuerst ein PDF hoch und generieren Sie Fragen.")
+    elif st.session_state.app_mode == "Als PDF herunterladen":
         download_pdf_app()
 
 if __name__ == '__main__':
