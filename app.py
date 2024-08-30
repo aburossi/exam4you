@@ -172,23 +172,23 @@ def mc_quiz_app():
             """, unsafe_allow_html=True)
 
 def download_pdf_app():
-    st.subheader('Download Your Exam as PDF')
+    st.subheader('Lade die Prüfung als PDF herunter')
 
     questions = st.session_state.generated_questions
 
     if questions:
         for i, q in enumerate(questions):
-            st.markdown(f"### Q{i+1}: {q['question']}")
+            st.markdown(f"### Frage {i+1}: {q['question']}")
             for choice in q['choices']:
                 st.write(choice)
             st.write(f"**Correct answer:** {q['correct_answer']}")
             st.write(f"**Erklärung:** {q['explanation']}")
             st.write("---")
 
-        pdf_type = st.radio("Choose PDF type:", ["With answers (for teachers)", "Without answers (for students)"])
+        pdf_type = st.radio("Wähle die Ausgabe:", ["Mit Lösungen", "Ohne Lösungen"])
         
         if st.button("Generate PDF"):
-            if pdf_type == "With answers (for teachers)":
+            if pdf_type == "Mit Lösungen":
                 pdf_bytes = generate_pdf(questions, include_answers=True)
                 file_name = "exam_with_answers.pdf"
             else:
