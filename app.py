@@ -181,7 +181,7 @@ def download_pdf_app():
             for choice in q['choices']:
                 st.write(choice)
             st.write(f"**Correct answer:** {q['correct_answer']}")
-            st.write(f"**Explanation:** {q['explanation']}")
+            st.write(f"**Erklärung:** {q['explanation']}")
             st.write("---")
 
         pdf_bytes = generate_pdf(questions)
