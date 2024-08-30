@@ -157,7 +157,7 @@ def mc_quiz_app():
                 if feedback_type == "Correct":
                     st.success(st.session_state.feedback[i][0])
                 else:
-                    st.error(f"{st.session_state.feedback[i][0]} - Correct answer: {st.session_state.feedback[i][2]}")
+                    st.error(f"{st.session_state.feedback[i][0]} - Richtige Antwort: {st.session_state.feedback[i][2]}")
                 
                 st.markdown(f"Explanation: {st.session_state.feedback[i][1]}")
 
