@@ -101,6 +101,22 @@ class PDF(FPDF):
         self.multi_cell(0, 10, body)
         self.ln()
 
+    def print_checkbox(self, x, y, checked=False):
+        """
+        Draws a checkbox at the specified (x, y) coordinates.
+        If `checked` is True, the checkbox will be marked.
+        """
+        # Draw the square for the checkbox
+        self.rect(x, y, 5, 5)
+        
+        if checked:
+            # Draw a check mark
+            self.set_line_width(0.5)
+            self.line(x, y, x + 5, y + 5)
+            self.line(x + 5, y, x, y + 5)
+            self.set_line_width(0.2)  # Reset to default
+
+
 def generate_pdf(questions, include_answers=True):
     pdf = PDF()
     pdf.add_page()
@@ -109,22 +125,28 @@ def generate_pdf(questions, include_answers=True):
         question = f"Q{i+1}: {q['question']}"
         pdf.chapter_title(question)
 
+        # List the choices
         choices = "\n".join(q['choices'])
         pdf.chapter_body(choices)
 
         if include_answers:
+            # Add the correct answer
             correct_answer = f"Correct answer: {q['correct_answer']}"
             pdf.chapter_body(correct_answer)
 
+            # Add the explanation
             explanation = f"Explanation: {q['explanation']}"
             pdf.chapter_body(explanation)
 
             # Print checkbox for "Test on paper"
-            pdf.print_checkbox(10, pdf.get_y(), True)
-            pdf.cell(20, 5, "Test on paper")
+            current_y = pdf.get_y()  # Get current y position
+            pdf.print_checkbox(10, current_y, True)  # Draw a checked checkbox
+            pdf.set_xy(16, current_y)  # Move to the right of the checkbox
+            pdf.cell(0, 5, "Test on paper")
             pdf.ln()
 
     return pdf.output(dest="S").encode("latin1")
+
 
 
 def submit_answer(i, quiz_data):
