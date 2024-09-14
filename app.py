@@ -7,32 +7,44 @@ from fpdf import FPDF
 from docx import Document
 from docx.shared import Pt
 from docx.enum.text import WD_PARAGRAPH_ALIGNMENT
+from io import BytesIO
 
-
-# Set page config
-st.set_page_config(page_title="Exam Creator", page_icon="📝")
+# Set Streamlit page configuration
+st.set_page_config(page_title="Exam Creator", page_icon="📝", layout="wide")
 
 __version__ = "1.3.0"
 
-# Main app functions
+# --------------------------- Helper Functions ---------------------------
+
 def stream_llm_response(messages, model_params):
+    """
+    Sends messages to OpenAI's ChatCompletion API and returns the response content.
+    """
     openai.api_key = st.secrets["OPENAI_API_KEY"]
     response = openai.ChatCompletion.create(
-        model=model_params["model"] if "model" in model_params else "gpt-4o-mini",
+        model=model_params.get("model", "gpt-4"),
         messages=messages,
-        temperature=model_params["temperature"] if "temperature" in model_params else 0.5,
+        temperature=model_params.get("temperature", 0.5),
         max_tokens=12000,
     )
     return response.choices[0].message['content']
 
 def extract_text_from_pdf(pdf_file):
+    """
+    Extracts text content from an uploaded PDF file.
+    """
     pdf_reader = PdfReader(pdf_file)
     text = ""
     for page in pdf_reader.pages:
-        text += page.extract_text() + "\n"
+        extracted_text = page.extract_text()
+        if extracted_text:
+            text += extracted_text + "\n"
     return text
 
 def chunk_text(text, max_tokens=3000):
+    """
+    Splits the extracted text into manageable chunks based on the maximum token limit.
+    """
     sentences = text.split('. ')
     chunks = []
     chunk = ""
@@ -47,6 +59,9 @@ def chunk_text(text, max_tokens=3000):
     return chunks
 
 def generate_mc_questions(content_text):
+    """
+    Generates multiple-choice questions based on the provided content using OpenAI's API.
+    """
     system_prompt = (
         "Sie sind ein Lehrer für Allgemeinbildung und sollen eine Prüfung zum Thema des eingereichten PDFs erstellen. "
         "Verwenden Sie den Inhalt des PDFs (bitte gründlich analysieren) und erstellen Sie eine Single-Choice-Prüfung auf Oberstufenniveau. "
@@ -70,12 +85,15 @@ def generate_mc_questions(content_text):
         {"role": "user", "content": user_prompt},
     ]
     try:
-        response = stream_llm_response(messages, model_params={"model": "gpt-4o-mini", "temperature": 0.5})
+        response = stream_llm_response(messages, model_params={"model": "gpt-4", "temperature": 0.5})
         return response, None
     except Exception as e:
         return None, str(e)
 
 def parse_generated_questions(response):
+    """
+    Parses the JSON response from OpenAI into Python objects.
+    """
     try:
         json_start = response.find('[')
         json_end = response.rfind(']') + 1
@@ -90,15 +108,17 @@ def parse_generated_questions(response):
     except Exception as e:
         return None, f"Unexpected error: {str(e)}\n\nFirst 500 characters of response:\n{response[:500]}..."
 
+# --------------------------- PDF Generation Class ---------------------------
+
 class PDF(FPDF):
     def header(self):
-        self.set_font('Arial', 'B', 12)
+        self.set_font('Arial', 'B', 16)
         self.cell(0, 10, 'Generated Exam', 0, 1, 'C')
 
     def chapter_title(self, title):
         self.set_font('Arial', 'B', 12)
         self.multi_cell(0, 10, title)
-        self.ln(5)
+        self.ln(2)
 
     def chapter_body(self, body):
         self.set_font('Arial', '', 12)
@@ -120,52 +140,12 @@ class PDF(FPDF):
             self.line(x + 5, y, x, y + 5)
             self.set_line_width(0.2)  # Reset to default
 
-def generate_docx(questions, include_answers=True):
-    document = Document()
-    
-    # Set document title
-    title = document.add_heading('Generated Exam', level=1)
-    title.alignment = WD_PARAGRAPH_ALIGNMENT.CENTER
-    
-    for i, q in enumerate(questions):
-        # Add question number and text
-        question_text = f"Q{i+1}: {q['question']}"
-        document.add_paragraph(question_text, style='List Number')
-        
-        # Add choices
-        for choice in q['choices']:
-            document.add_paragraph(choice, style='List Bullet')
-        
-        if include_answers:
-            # Add correct answer
-            correct_answer = f"**Correct Answer:** {q['correct_answer']}"
-            p = document.add_paragraph()
-            run = p.add_run(correct_answer)
-            run.bold = True
-            
-            # Add explanation
-            explanation = f"**Explanation:** {q['explanation']}"
-            p = document.add_paragraph()
-            run = p.add_run(explanation)
-            run.italic = True
-            
-            # Add "Test on paper" checkbox
-            p = document.add_paragraph()
-            p.add_run("[ ] Test on paper")
-        
-        # Add a horizontal line for separation
-        document.add_paragraph().add_run().add_break()
-    
-    # Save the document to a BytesIO object
-    from io import BytesIO
-    docx_io = BytesIO()
-    document.save(docx_io)
-    docx_io.seek(0)
-    
-    return docx_io.getvalue()
-
+# --------------------------- PDF Generation Function ---------------------------
 
 def generate_pdf(questions, include_answers=True):
+    """
+    Generates a PDF file containing the exam questions.
+    """
     pdf = PDF()
     pdf.add_page()
 
@@ -174,15 +154,15 @@ def generate_pdf(questions, include_answers=True):
         pdf.chapter_title(question)
 
         # List the choices
-        choices = "\n".join(q['choices'])
-        pdf.chapter_body(choices)
+        for choice in q['choices']:
+            pdf.chapter_body(choice)
 
         if include_answers:
-            # Add the correct answer
+            # Add correct answer
             correct_answer = f"Correct answer: {q['correct_answer']}"
             pdf.chapter_body(correct_answer)
 
-            # Add the explanation
+            # Add explanation
             explanation = f"Explanation: {q['explanation']}"
             pdf.chapter_body(explanation)
 
@@ -195,22 +175,72 @@ def generate_pdf(questions, include_answers=True):
 
     return pdf.output(dest="S").encode("latin1")
 
+# --------------------------- DOCX Generation Function ---------------------------
 
+def generate_docx(questions, include_answers=True):
+    """
+    Generates a DOCX file containing the exam questions.
+    """
+    document = Document()
+    
+    # Set document title
+    title = document.add_heading('Generated Exam', level=1)
+    title.alignment = WD_PARAGRAPH_ALIGNMENT.CENTER
+
+    for i, q in enumerate(questions):
+        # Add question number and text
+        question_text = f"Q{i+1}: {q['question']}"
+        p = document.add_paragraph(question_text, style='List Number')
+        
+        # Add choices
+        for choice in q['choices']:
+            p = document.add_paragraph(choice, style='List Bullet')
+            p.paragraph_format.left_indent = Pt(20)
+        
+        if include_answers:
+            # Add correct answer
+            p = document.add_paragraph("Correct Answer: " + q['correct_answer'])
+            p.runs[0].bold = True
+            
+            # Add explanation
+            p = document.add_paragraph("Explanation: " + q['explanation'])
+            p.runs[0].italic = True
+            
+            # Add "Test on paper" checkbox
+            p = document.add_paragraph("[ ] Test on paper")
+        
+        # Add a horizontal line for separation
+        document.add_paragraph().add_run().add_break()
+
+    # Save the document to a BytesIO object
+    docx_io = BytesIO()
+    document.save(docx_io)
+    docx_io.seek(0)
+    
+    return docx_io.getvalue()
+
+# --------------------------- Quiz Interaction Functions ---------------------------
 
 def submit_answer(i, quiz_data):
+    """
+    Handles the submission of an answer for a given question.
+    """
     user_choice = st.session_state.get(f"user_choice_{i}")
     
     st.session_state.answers[i] = user_choice
 
     if user_choice == quiz_data['correct_answer']:
-        st.session_state.feedback[i] = ("Richtig", quiz_data.get('explanation', 'Keine Erklärung verfügbar'))
+        st.session_state.feedback[i] = ("Correct", quiz_data.get('explanation', 'No explanation available.'))
         st.session_state.correct_answers += 1
     else:
-        st.session_state.feedback[i] = ("Falsch", quiz_data.get('explanation', 'Keine Erklärung verfügbar'), quiz_data['correct_answer'])
+        st.session_state.feedback[i] = ("Incorrect", quiz_data.get('explanation', 'No explanation available.'), quiz_data['correct_answer'])
 
 def mc_quiz_app():
-    st.subheader('Single-Choice-Prüfung')
-    st.write('Bitte wählen Sie eine Antwort für jede Frage.')
+    """
+    Renders the multiple-choice quiz interface within the Streamlit app.
+    """
+    st.subheader('Multiple-Choice Quiz')
+    st.write('Please select an answer for each question.')
 
     questions = st.session_state.generated_questions
 
@@ -221,21 +251,21 @@ def mc_quiz_app():
             st.session_state.correct_answers = 0
 
         for i, quiz_data in enumerate(questions):
-            st.markdown(f"### Frage {i+1}: {quiz_data['question']}")
+            st.markdown(f"### Question {i+1}: {quiz_data['question']}")
 
             if st.session_state.answers[i] is None:
-                user_choice = st.radio("Wählen Sie die richtige Antwort:", quiz_data['choices'], key=f"user_choice_{i}")
-                st.button(f"Antwort {i+1} überprüfen", key=f"submit_{i}", on_click=submit_answer, args=(i, quiz_data))
+                user_choice = st.radio("Select the correct answer:", quiz_data['choices'], key=f"user_choice_{i}")
+                st.button(f"Check Answer {i+1}", key=f"submit_{i}", on_click=submit_answer, args=(i, quiz_data))
             else:
-                st.radio("Wählen Sie eine Antwort:", quiz_data['choices'], key=f"user_choice_{i}", index=quiz_data['choices'].index(st.session_state.answers[i]), disabled=True)
+                st.radio("Your answer:", quiz_data['choices'], key=f"user_choice_{i}", index=quiz_data['choices'].index(st.session_state.answers[i]), disabled=True)
                 
                 feedback_type = st.session_state.feedback[i][0]
-                if feedback_type == "Richtig":
-                    st.success(st.session_state.feedback[i][0])
+                if feedback_type == "Correct":
+                    st.success("Correct!")
                 else:
-                    st.error(f"{st.session_state.feedback[i][0]} - Richtige Antwort: {st.session_state.feedback[i][2]}")
+                    st.error(f"Incorrect. The correct answer is: {st.session_state.feedback[i][2]}")
                 
-                st.markdown(f"Erklärung: {st.session_state.feedback[i][1]}")
+                st.markdown(f"**Explanation:** {st.session_state.feedback[i][1]}")
 
         if all(answer is not None for answer in st.session_state.answers):
             score = st.session_state.correct_answers
@@ -243,77 +273,95 @@ def mc_quiz_app():
             st.write(f"""
                 <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh;">
                     <h1 style="font-size: 3em; color: gold;">🏆</h1>
-                    <h1>Ihr Ergebnis: {score}/{total_questions}</h1>
+                    <h1>Your Score: {score}/{total_questions}</h1>
                 </div>
             """, unsafe_allow_html=True)
 
+# --------------------------- Download Functions ---------------------------
+
 def download_files_app():
-    st.subheader('Prüfung herunterladen')
+    """
+    Provides options to download the generated quiz as either PDF or DOCX.
+    """
+    st.subheader('Download Exam as PDF or DOCX')
     
     questions = st.session_state.generated_questions
-    
+
     if questions:
-        # Display questions preview
-        for i, q in enumerate(questions):
-            st.markdown(f"### Frage {i+1}: {q['question']}")
-            for choice in q['choices']:
-                st.write(choice)
-            if 'correct_answer' in q:
-                st.write(f"**Richtige Antwort:** {q['correct_answer']}")
-            if 'explanation' in q:
-                st.write(f"**Erklärung:** {q['explanation']}")
-            st.write("---")
+        # Preview of questions
+        with st.expander("Preview Generated Questions"):
+            for i, q in enumerate(questions):
+                st.markdown(f"### Question {i+1}: {q['question']}")
+                for choice in q['choices']:
+                    st.write(choice)
+                if 'correct_answer' in q:
+                    st.write(f"**Correct Answer:** {q['correct_answer']}")
+                if 'explanation' in q:
+                    st.write(f"**Explanation:** {q['explanation']}")
+                st.write("---")
     
         # Choose format and inclusion of answers
-        doc_type = st.radio("Wählen Sie die Ausgabe:", ["DOCX mit Lösungen", "DOCX ohne Lösungen"])
+        format_option = st.radio("Select the download format:", ["PDF", "DOCX"])
+        include_answers = st.checkbox("Include Answers and Explanations", value=True)
         
-        if st.button("Datei generieren"):
-            if doc_type == "DOCX mit Lösungen":
-                file_bytes = generate_docx(questions, include_answers=True)
-                file_name = "prüfung_mit_antworten.docx"
+        if st.button("Generate and Download"):
+            if format_option == "PDF":
+                file_bytes = generate_pdf(questions, include_answers=include_answers)
+                file_name = "exam_with_answers.pdf" if include_answers else "exam_without_answers.pdf"
+                mime_type = "application/pdf"
             else:
-                file_bytes = generate_docx(questions, include_answers=False)
-                file_name = "prüfung_ohne_antworten.docx"
+                file_bytes = generate_docx(questions, include_answers=include_answers)
+                file_name = "exam_with_answers.docx" if include_answers else "exam_without_answers.docx"
+                mime_type = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
             
             st.download_button(
-                label="DOCX herunterladen",
+                label=f"Download {format_option}",
                 data=file_bytes,
                 file_name=file_name,
-                mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                mime=mime_type
             )
+    else:
+        st.error("No questions found. Please generate an exam first.")
+
+# --------------------------- PDF Upload and Question Generation ---------------------------
 
 def pdf_upload_app():
-    st.subheader("Laden Sie Ihren Inhalt hoch - Erstellen Sie Ihre Testprüfung")
-    st.write("Laden Sie den Inhalt hoch und wir kümmern uns um den Rest")
+    """
+    Handles PDF upload, text extraction, and question generation.
+    """
+    st.subheader("Upload Your PDF - Create Your Exam")
+    st.write("Upload your PDF content, and we'll handle the rest.")
 
-    content_text = ""
-    
     if 'messages' not in st.session_state:
         st.session_state.messages = []
     
-    uploaded_pdf = st.file_uploader("Laden Sie ein PDF-Dokument hoch", type=["pdf"])
+    uploaded_pdf = st.file_uploader("Upload a PDF Document", type=["pdf"])
     if uploaded_pdf:
-        pdf_text = extract_text_from_pdf(uploaded_pdf)
-        content_text += pdf_text
-        st.success("PDF-Inhalt zur Sitzung hinzugefügt.")
+        with st.spinner("Extracting text from PDF..."):
+            pdf_text = extract_text_from_pdf(uploaded_pdf)
+        
+        if not pdf_text.strip():
+            st.error("No text could be extracted from the uploaded PDF. Please try a different file.")
+            return
+        
+        st.success("PDF content successfully added to the session.")
         
         # Display a sample of the extracted text for verification
-        st.subheader("Beispiel des extrahierten PDF-Inhalts:")
-        st.text(content_text[:500] + "...")  # Display first 500 characters
-
-        st.info("Ich erstelle die Prüfung aus den hochgeladenen Inhalten. Dies dauert nur eine Minute.....")
-        chunks = chunk_text(content_text)
+        st.subheader("Sample of Extracted PDF Content:")
+        st.text_area("Extracted Text (First 500 characters)", value=pdf_text[:500] + "...", height=200)
+        
+        st.info("Generating exam questions from the uploaded content. This may take a minute...")
+        chunks = chunk_text(pdf_text)
         questions = []
         for chunk in chunks:
             response, error = generate_mc_questions(chunk)
             if error:
-                st.error(f"Fehler beim Generieren der Fragen: {error}")
+                st.error(f"Error generating questions: {error}")
                 break
             parsed_questions, parse_error = parse_generated_questions(response)
             if parse_error:
                 st.error(parse_error)
-                st.text("Vollständige Antwort:")
-                st.text(response)
+                st.text_area("Full Response:", value=response, height=200)
                 break
             if parsed_questions:
                 questions.extend(parsed_questions)
@@ -322,47 +370,60 @@ def pdf_upload_app():
                     break
         if questions:
             st.session_state.generated_questions = questions
-            st.session_state.content_text = content_text
+            st.session_state.content_text = pdf_text
             st.session_state.mc_test_generated = True
-            st.success(f"Die Prüfung wurde erfolgreich mit {len(questions)} Fragen erstellt!")
+            st.success(f"Exam successfully generated with {len(questions)} questions!")
             
+            # Display options to proceed
             col1, col2 = st.columns(2)
             with col1:
-                if st.button("Prüfung ablegen"):
-                    st.session_state.app_mode = "Prüfung ablegen"
+                if st.button("Take the Exam"):
+                    st.session_state.app_mode = "Take Exam"
                     st.experimental_rerun()
             with col2:
-                if st.button("Als PDF herunterladen"):
-                    st.session_state.app_mode = "Als PDF herunterladen"
+                if st.button("Download Exam"):
+                    st.session_state.app_mode = "Download Exam"
                     st.experimental_rerun()
         else:
-            st.error("Es wurden keine Fragen generiert. Bitte überprüfen Sie die obigen Fehlermeldungen und versuchen Sie es erneut.")
+            st.error("No questions were generated. Please check the above error messages and try again.")
     else:
-        st.warning("Bitte laden Sie ein PDF hoch, um die interaktive Prüfung zu generieren.")
+        st.warning("Please upload a PDF to generate an interactive exam.")
+
+# --------------------------- Main Application ---------------------------
 
 def main():
-    st.title("Prüfungsersteller")
-    
+    """
+    The main function that controls the Streamlit app's flow.
+    """
+    st.title("📝 Exam Creator")
+    st.markdown(f"**Version:** {__version__}")
+
     if "app_mode" not in st.session_state:
-        st.session_state.app_mode = "PDF hochladen & Fragen generieren"
+        st.session_state.app_mode = "Upload PDF & Generate Questions"
+
+    # Define app modes
+    app_mode_options = ["Upload PDF & Generate Questions", "Take Exam", "Download Exam"]
     
-    app_mode_options = ["PDF hochladen & Fragen generieren", "Prüfung ablegen", "Prüfung herunterladen"]
-    
-    st.session_state.app_mode = st.sidebar.selectbox("Wählen Sie den App-Modus", app_mode_options, index=app_mode_options.index(st.session_state.app_mode))
-    
-    if st.session_state.app_mode == "PDF hochladen & Fragen generieren":
+    # Sidebar for navigation
+    st.sidebar.title("Navigation")
+    st.session_state.app_mode = st.sidebar.selectbox("Select App Mode", app_mode_options, index=app_mode_options.index(st.session_state.app_mode))
+
+    # Render the selected app mode
+    if st.session_state.app_mode == "Upload PDF & Generate Questions":
         pdf_upload_app()
-    elif st.session_state.app_mode == "Prüfung ablegen":
+    elif st.session_state.app_mode == "Take Exam":
         if 'mc_test_generated' in st.session_state and st.session_state.mc_test_generated:
             if 'generated_questions' in st.session_state and st.session_state.generated_questions:
                 mc_quiz_app()
             else:
-                st.warning("Keine generierten Fragen gefunden. Bitte laden Sie zuerst ein PDF hoch und generieren Sie Fragen.")
+                st.warning("No generated questions found. Please upload a PDF and generate questions first.")
         else:
-            st.warning("Bitte laden Sie zuerst ein PDF hoch und generieren Sie Fragen.")
-    elif st.session_state.app_mode == "Prüfung herunterladen":
-        download_docx_app()  # Use download_files_app() if offering multiple formats
+            st.warning("Please upload a PDF and generate questions first.")
+    elif st.session_state.app_mode == "Download Exam":
+        if 'mc_test_generated' in st.session_state and st.session_state.mc_test_generated:
+            download_files_app()
+        else:
+            st.warning("Please upload a PDF and generate questions first.")
 
 if __name__ == '__main__':
     main()
-
