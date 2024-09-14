@@ -4,6 +4,10 @@ import openai
 import json
 from PyPDF2 import PdfReader
 from fpdf import FPDF
+from docx import Document
+from docx.shared import Pt
+from docx.enum.text import WD_PARAGRAPH_ALIGNMENT
+
 
 # Set page config
 st.set_page_config(page_title="Exam Creator", page_icon="📝")
@@ -116,6 +120,50 @@ class PDF(FPDF):
             self.line(x + 5, y, x, y + 5)
             self.set_line_width(0.2)  # Reset to default
 
+def generate_docx(questions, include_answers=True):
+    document = Document()
+    
+    # Set document title
+    title = document.add_heading('Generated Exam', level=1)
+    title.alignment = WD_PARAGRAPH_ALIGNMENT.CENTER
+    
+    for i, q in enumerate(questions):
+        # Add question number and text
+        question_text = f"Q{i+1}: {q['question']}"
+        document.add_paragraph(question_text, style='List Number')
+        
+        # Add choices
+        for choice in q['choices']:
+            document.add_paragraph(choice, style='List Bullet')
+        
+        if include_answers:
+            # Add correct answer
+            correct_answer = f"**Correct Answer:** {q['correct_answer']}"
+            p = document.add_paragraph()
+            run = p.add_run(correct_answer)
+            run.bold = True
+            
+            # Add explanation
+            explanation = f"**Explanation:** {q['explanation']}"
+            p = document.add_paragraph()
+            run = p.add_run(explanation)
+            run.italic = True
+            
+            # Add "Test on paper" checkbox
+            p = document.add_paragraph()
+            p.add_run("[ ] Test on paper")
+        
+        # Add a horizontal line for separation
+        document.add_paragraph().add_run().add_break()
+    
+    # Save the document to a BytesIO object
+    from io import BytesIO
+    docx_io = BytesIO()
+    document.save(docx_io)
+    docx_io.seek(0)
+    
+    return docx_io.getvalue()
+
 
 def generate_pdf(questions, include_answers=True):
     pdf = PDF()
@@ -199,35 +247,39 @@ def mc_quiz_app():
                 </div>
             """, unsafe_allow_html=True)
 
-def download_pdf_app():
-    st.subheader('Prüfung als PDF herunterladen')
-
+def download_files_app():
+    st.subheader('Prüfung herunterladen')
+    
     questions = st.session_state.generated_questions
-
+    
     if questions:
+        # Display questions preview
         for i, q in enumerate(questions):
             st.markdown(f"### Frage {i+1}: {q['question']}")
             for choice in q['choices']:
                 st.write(choice)
-            st.write(f"**Richtige Antwort:** {q['correct_answer']}")
-            st.write(f"**Erklärung:** {q['explanation']}")
+            if 'correct_answer' in q:
+                st.write(f"**Richtige Antwort:** {q['correct_answer']}")
+            if 'explanation' in q:
+                st.write(f"**Erklärung:** {q['explanation']}")
             st.write("---")
-
-        pdf_type = st.radio("Wählen Sie die Ausgabe:", ["Mit Lösungen", "Ohne Lösungen"])
+    
+        # Choose format and inclusion of answers
+        doc_type = st.radio("Wählen Sie die Ausgabe:", ["DOCX mit Lösungen", "DOCX ohne Lösungen"])
         
-        if st.button("PDF generieren"):
-            if pdf_type == "Mit Lösungen":
-                pdf_bytes = generate_pdf(questions, include_answers=True)
-                file_name = "prüfung_mit_antworten.pdf"
+        if st.button("Datei generieren"):
+            if doc_type == "DOCX mit Lösungen":
+                file_bytes = generate_docx(questions, include_answers=True)
+                file_name = "prüfung_mit_antworten.docx"
             else:
-                pdf_bytes = generate_pdf(questions, include_answers=False)
-                file_name = "prüfung_ohne_antworten.pdf"
+                file_bytes = generate_docx(questions, include_answers=False)
+                file_name = "prüfung_ohne_antworten.docx"
             
             st.download_button(
-                label="PDF herunterladen",
-                data=pdf_bytes,
+                label="DOCX herunterladen",
+                data=file_bytes,
                 file_name=file_name,
-                mime="application/pdf"
+                mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
             )
 
 def pdf_upload_app():
@@ -294,7 +346,7 @@ def main():
     if "app_mode" not in st.session_state:
         st.session_state.app_mode = "PDF hochladen & Fragen generieren"
     
-    app_mode_options = ["PDF hochladen & Fragen generieren", "Prüfung ablegen", "Als PDF herunterladen"]
+    app_mode_options = ["PDF hochladen & Fragen generieren", "Prüfung ablegen", "Prüfung herunterladen"]
     
     st.session_state.app_mode = st.sidebar.selectbox("Wählen Sie den App-Modus", app_mode_options, index=app_mode_options.index(st.session_state.app_mode))
     
@@ -308,8 +360,8 @@ def main():
                 st.warning("Keine generierten Fragen gefunden. Bitte laden Sie zuerst ein PDF hoch und generieren Sie Fragen.")
         else:
             st.warning("Bitte laden Sie zuerst ein PDF hoch und generieren Sie Fragen.")
-    elif st.session_state.app_mode == "Als PDF herunterladen":
-        download_pdf_app()
+    elif st.session_state.app_mode == "Prüfung herunterladen":
+        download_docx_app()  # Use download_files_app() if offering multiple formats
 
 if __name__ == '__main__':
     main()
