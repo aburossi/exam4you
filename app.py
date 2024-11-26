@@ -262,7 +262,7 @@ def submit_answer(i, quiz_data):
     Handles the submission of an answer for a given question.
     """
     user_choice = st.session_state.get(f"user_choice_{i}")
-
+    
     st.session_state.answers[i] = user_choice
 
     if user_choice == quiz_data['correct_answer']:
@@ -335,7 +335,7 @@ def download_files_app():
                 if 'explanation' in q:
                     st.write(f"**Explanation:** {q['explanation']}")
                 st.write("---")
-    
+
         # Choose format and inclusion of answers
         format_option = st.radio("Select the download format:", ["PDF", "DOCX"])
         include_answers = st.checkbox("Include Answers and Explanations", value=True)
@@ -358,6 +358,18 @@ def download_files_app():
             )
     else:
         st.error("No questions found. Please generate an exam first.")
+
+# --------------------------- System Prompt ---------------------------
+
+system_prompt = (
+    "Sie sind ein Lehrer für Allgemeinbildung und sollen eine Prüfung zum Thema des eingereichten Inhalts erstellen. "
+    "Verwenden Sie den Inhalt (bitte gründlich analysieren) und erstellen Sie eine Single-Choice-Prüfung auf Oberstufenniveau. "
+    "Jede Frage soll genau eine richtige Antwort haben. "
+    "Erstellen Sie so viele Prüfungsfragen, wie nötig sind, um den gesamten Inhalt abzudecken, aber maximal 20 Fragen. "
+    "Geben Sie die Ausgabe im JSON-Format an. "
+    "Das JSON sollte folgende Struktur haben: [{'question': '...', 'choices': ['...'], 'correct_answer': '...', 'explanation': '...'}, ...]. "
+    "Stellen Sie sicher, dass das JSON gültig und korrekt formatiert ist."
+)
 
 # --------------------------- Question Generation Functions ---------------------------
 
@@ -481,10 +493,11 @@ def pdf_upload_app():
                 else:
                     st.error("No questions were generated. Please try again.")
         elif file_type == "image" and content:
-            # 1. Hide the uploaded image behind a dropdown
-            display_image = st.selectbox("Image Display Options", ["Hide Image", "Show Image"])
-            if display_image == "Show Image":
-                st.image(uploaded_file, caption="Uploaded Image", use_column_width=True)
+            # Implement dropdown to show/hide the uploaded image
+            with st.expander("View Uploaded Image"):
+                image_display_option = st.selectbox("Image Display", ["Hide Image", "Show Image"])
+                if image_display_option == "Show Image":
+                    st.image(uploaded_file, caption="Uploaded Image", use_column_width=True)
 
             user_prompt = (
                 "Using the content derived from the uploaded image, create single-choice questions. "
@@ -537,34 +550,44 @@ def main():
     if "app_mode" not in st.session_state:
         st.session_state.app_mode = "Upload File & Generate Questions"
 
-    # Define app modes
-    app_mode_options = ["Upload File & Generate Questions", "Take Exam", "Download Exam"]
-    
+    # Initialize sidebar checkboxes in session state if not present
+    if 'mode_upload' not in st.session_state:
+        st.session_state.mode_upload = False
+    if 'mode_take_exam' not in st.session_state:
+        st.session_state.mode_take_exam = False
+    if 'mode_download_exam' not in st.session_state:
+        st.session_state.mode_download_exam = False
+
+    # Define callback functions to ensure mutual exclusivity
+    def set_upload_mode():
+        st.session_state.mode_upload = True
+        st.session_state.mode_take_exam = False
+        st.session_state.mode_download_exam = False
+        st.session_state.app_mode = "Upload File & Generate Questions"
+
+    def set_take_exam_mode():
+        st.session_state.mode_upload = False
+        st.session_state.mode_take_exam = True
+        st.session_state.mode_download_exam = False
+        st.session_state.app_mode = "Take Exam"
+
+    def set_download_exam_mode():
+        st.session_state.mode_upload = False
+        st.session_state.mode_take_exam = False
+        st.session_state.mode_download_exam = True
+        st.session_state.app_mode = "Download Exam"
+
     # Sidebar for navigation using checkboxes
     st.sidebar.title("Navigation")
-    st.sidebar.write("Select an option below:")
-    
-    # Initialize checkboxes
-    upload_checkbox = st.sidebar.checkbox("Upload File & Generate Questions", key="upload_checkbox")
-    take_exam_checkbox = st.sidebar.checkbox("Take Exam", key="take_exam_checkbox")
-    download_exam_checkbox = st.sidebar.checkbox("Download Exam", key="download_exam_checkbox")
+    st.sidebar.markdown("Select the desired mode:")
 
-    # Logic to ensure only one checkbox is selected at a time
-    selected_options = []
-    if upload_checkbox:
-        selected_options.append("Upload File & Generate Questions")
-    if take_exam_checkbox:
-        selected_options.append("Take Exam")
-    if download_exam_checkbox:
-        selected_options.append("Download Exam")
+    # Render checkboxes with callbacks
+    upload_mode = st.sidebar.checkbox("Upload File & Generate Questions", key='mode_upload', on_change=set_upload_mode)
+    take_exam_mode = st.sidebar.checkbox("Take Exam", key='mode_take_exam', on_change=set_take_exam_mode)
+    download_exam_mode = st.sidebar.checkbox("Download Exam", key='mode_download_exam', on_change=set_download_exam_mode)
 
-    if len(selected_options) > 1:
-        st.sidebar.error("Please select only one option at a time.")
-        st.session_state.app_mode = "Upload File & Generate Questions"  # Default mode
-    elif len(selected_options) == 1:
-        st.session_state.app_mode = selected_options[0]
-    else:
-        st.session_state.app_mode = "Upload File & Generate Questions"  # Default mode
+    # Ensure only one mode is active at a time
+    # This is handled by the callback functions above
 
     # Render the selected app mode
     if st.session_state.app_mode == "Upload File & Generate Questions":
