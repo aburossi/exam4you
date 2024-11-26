@@ -262,7 +262,7 @@ def submit_answer(i, quiz_data):
     Handles the submission of an answer for a given question.
     """
     user_choice = st.session_state.get(f"user_choice_{i}")
-    
+
     st.session_state.answers[i] = user_choice
 
     if user_choice == quiz_data['correct_answer']:
@@ -359,18 +359,6 @@ def download_files_app():
     else:
         st.error("No questions found. Please generate an exam first.")
 
-# --------------------------- System Prompt ---------------------------
-
-system_prompt = (
-    "Sie sind ein Lehrer für Allgemeinbildung und sollen eine Prüfung zum Thema des eingereichten Inhalts erstellen. "
-    "Verwenden Sie den Inhalt (bitte gründlich analysieren) und erstellen Sie eine Single-Choice-Prüfung auf Oberstufenniveau. "
-    "Jede Frage soll genau eine richtige Antwort haben. "
-    "Erstellen Sie so viele Prüfungsfragen, wie nötig sind, um den gesamten Inhalt abzudecken, aber maximal 20 Fragen. "
-    "Geben Sie die Ausgabe im JSON-Format an. "
-    "Das JSON sollte folgende Struktur haben: [{'question': '...', 'choices': ['...'], 'correct_answer': '...', 'explanation': '...'}, ...]. "
-    "Stellen Sie sicher, dass das JSON gültig und korrekt formatiert ist."
-)
-
 # --------------------------- Question Generation Functions ---------------------------
 
 def generate_mc_questions(content, system_prompt):
@@ -392,7 +380,7 @@ def generate_mc_questions(content, system_prompt):
     ]
     try:
         response = openai.ChatCompletion.create(
-            model="gpt-4o-mini",
+            model="gpt-4o",
             messages=messages,
             max_tokens=1500,
             temperature=0.7,
@@ -427,7 +415,7 @@ def get_questions_from_image(image, system_prompt, user_prompt):
         ]
 
         response = openai.ChatCompletion.create(
-            model="gpt-4o-mini",
+            model="gpt-4o",
             messages=messages,
             max_tokens=1500,
             temperature=0.7,
@@ -493,7 +481,10 @@ def pdf_upload_app():
                 else:
                     st.error("No questions were generated. Please try again.")
         elif file_type == "image" and content:
-            st.image(uploaded_file, caption="Uploaded Image", use_column_width=True)
+            # 1. Hide the uploaded image behind a dropdown
+            display_image = st.selectbox("Image Display Options", ["Hide Image", "Show Image"])
+            if display_image == "Show Image":
+                st.image(uploaded_file, caption="Uploaded Image", use_column_width=True)
 
             user_prompt = (
                 "Using the content derived from the uploaded image, create single-choice questions. "
@@ -544,14 +535,36 @@ def main():
     st.markdown(f"**Version:** {__version__}")
 
     if "app_mode" not in st.session_state:
-        st.session_state.app_mode = "Upload PDF & Generate Questions"
+        st.session_state.app_mode = "Upload File & Generate Questions"
 
     # Define app modes
     app_mode_options = ["Upload File & Generate Questions", "Take Exam", "Download Exam"]
     
-    # Sidebar for navigation
+    # Sidebar for navigation using checkboxes
     st.sidebar.title("Navigation")
-    st.session_state.app_mode = st.sidebar.selectbox("Select App Mode", app_mode_options, index=app_mode_options.index(st.session_state.app_mode) if st.session_state.app_mode in app_mode_options else 0)
+    st.sidebar.write("Select an option below:")
+    
+    # Initialize checkboxes
+    upload_checkbox = st.sidebar.checkbox("Upload File & Generate Questions", key="upload_checkbox")
+    take_exam_checkbox = st.sidebar.checkbox("Take Exam", key="take_exam_checkbox")
+    download_exam_checkbox = st.sidebar.checkbox("Download Exam", key="download_exam_checkbox")
+
+    # Logic to ensure only one checkbox is selected at a time
+    selected_options = []
+    if upload_checkbox:
+        selected_options.append("Upload File & Generate Questions")
+    if take_exam_checkbox:
+        selected_options.append("Take Exam")
+    if download_exam_checkbox:
+        selected_options.append("Download Exam")
+
+    if len(selected_options) > 1:
+        st.sidebar.error("Please select only one option at a time.")
+        st.session_state.app_mode = "Upload File & Generate Questions"  # Default mode
+    elif len(selected_options) == 1:
+        st.session_state.app_mode = selected_options[0]
+    else:
+        st.session_state.app_mode = "Upload File & Generate Questions"  # Default mode
 
     # Render the selected app mode
     if st.session_state.app_mode == "Upload File & Generate Questions":
