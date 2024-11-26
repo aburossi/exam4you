@@ -6,11 +6,24 @@ from PyPDF2 import PdfReader
 from docx import Document
 from PIL import Image
 import io
+import base64
 
 # Set Streamlit page configuration
 st.set_page_config(page_title="Exam Creator", page_icon="📝", layout="wide")
 
 __version__ = "1.3.0"
+
+# --------------------------- System Prompt ---------------------------
+
+system_prompt = (
+    "Sie sind ein Lehrer für Allgemeinbildung und sollen eine Prüfung zum Thema des eingereichten Inhalts erstellen. "
+    "Verwenden Sie den Inhalt (bitte gründlich analysieren) und erstellen Sie eine Single-Choice-Prüfung auf Oberstufenniveau. "
+    "Jede Frage soll genau eine richtige Antwort haben. "
+    "Erstellen Sie so viele Prüfungsfragen, wie nötig sind, um den gesamten Inhalt abzudecken, aber maximal 20 Fragen. "
+    "Geben Sie die Ausgabe im JSON-Format an. "
+    "Das JSON sollte folgende Struktur haben: [{'question': '...', 'choices': ['...'], 'correct_answer': '...', 'explanation': '...'}, ...]. "
+    "Stellen Sie sicher, dass das JSON gültig und korrekt formatiert ist."
+)
 
 # --------------------------- File Handling Functions ---------------------------
 
@@ -44,51 +57,91 @@ def extract_text_from_docx(file):
 
 def process_image(file):
     """
-    Processes an uploaded image file and returns it as a PIL Image object.
+    Processes an uploaded image, resizes it if necessary, and converts it to a Base64-encoded string.
     """
     try:
         image = Image.open(file)
-        return image
+        if image.mode != "RGB":
+            image = image.convert("RGB")
+
+        max_size = 1000
+        if max(image.size) > max_size:
+            image.thumbnail((max_size, max_size))
+
+        buffered = io.BytesIO()
+        image.save(buffered, format="JPEG")
+        image_bytes = buffered.getvalue()
+        return base64.b64encode(image_bytes).decode("utf-8")
     except Exception as e:
         st.error(f"Error processing image: {e}")
         return None
 
-def process_uploaded_file(uploaded_file):
+# --------------------------- Question Generation Functions ---------------------------
+
+def generate_mc_questions(content, system_prompt):
     """
-    Processes an uploaded file based on its type.
-    Returns a dictionary with the file type and content.
+    Generates multiple-choice questions based on the provided content using OpenAI's API.
     """
-    file_type = uploaded_file.type
+    user_prompt = (
+        "Using the following content from the uploaded document, create single-choice questions. "
+        "Ensure that each question is based on the information provided in the document content and has exactly one correct answer. "
+        "Create as many questions as necessary to cover the entire content, but no more than 20 questions. "
+        "Provide the output in JSON format with the following structure: "
+        "[{'question': '...', 'choices': ['...'], 'correct_answer': '...', 'explanation': '...'}]. "
+        "Ensure the JSON is valid and properly formatted.\n\nDocument Content:\n\n" + content
+    )
 
-    if file_type == "application/pdf":
-        text = extract_text_from_pdf(uploaded_file)
-        if text:
-            return {"type": "text", "content": text}
-        else:
-            st.error("Could not extract text from the PDF file.")
-            return None
+    messages = [
+        {"role": "system", "content": system_prompt},
+        {"role": "user", "content": user_prompt},
+    ]
+    try:
+        response = openai.ChatCompletion.create(
+            model="gpt-4o",
+            messages=messages,
+            max_tokens=1500,
+            temperature=0.7,
+        )
+        return response.choices[0].message["content"], None
+    except Exception as e:
+        return None, f"Error generating questions: {e}"
 
-    elif file_type == "application/vnd.openxmlformats-officedocument.wordprocessingml.document":
-        text = extract_text_from_docx(uploaded_file)
-        if text:
-            return {"type": "text", "content": text}
-        else:
-            st.error("Could not extract text from the DOCX file.")
-            return None
+def get_questions_from_image(image, system_prompt, user_prompt):
+    """
+    Generates questions based on an image using OpenAI's API.
+    """
+    try:
+        base64_image = process_image(image)
+        if not base64_image:
+            return None, "Image processing failed."
 
-    elif file_type.startswith("image/"):
-        image = process_image(uploaded_file)
-        if image:
-            return {"type": "image", "content": image}
-        else:
-            st.error("Could not process the uploaded image.")
-            return None
+        image_payload = {
+            "type": "image_url",
+            "image_url": {
+                "url": f"data:image/jpeg;base64,{base64_image}",
+                "detail": "low",
+            },
+        }
 
-    else:
-        st.error("Unsupported file type. Please upload a PDF, DOCX, or image file.")
-        return None
+        messages = [
+            {"role": "system", "content": system_prompt},
+            {
+                "role": "user",
+                "content": [{"type": "text", "text": user_prompt}, image_payload],
+            },
+        ]
 
-# --------------------------- PDF Upload and Question Generation ---------------------------
+        response = openai.ChatCompletion.create(
+            model="gpt-4o",
+            messages=messages,
+            max_tokens=1500,
+            temperature=0.7,
+        )
+        return response.choices[0].message["content"], None
+    except Exception as e:
+        return None, f"Error during question generation: {e}"
+
+# --------------------------- App Logic ---------------------------
 
 def pdf_upload_app():
     """
@@ -99,94 +152,75 @@ def pdf_upload_app():
 
     uploaded_file = st.file_uploader("Upload a file", type=["pdf", "docx", "jpg", "jpeg", "png"])
     if uploaded_file:
-        processed_file = process_uploaded_file(uploaded_file)
-        if processed_file:
-            file_type = processed_file["type"]
-            content = processed_file["content"]
+        if uploaded_file.type == "application/pdf":
+            content = extract_text_from_pdf(uploaded_file)
+            file_type = "text"
+        elif uploaded_file.type == "application/vnd.openxmlformats-officedocument.wordprocessingml.document":
+            content = extract_text_from_docx(uploaded_file)
+            file_type = "text"
+        elif uploaded_file.type.startswith("image/"):
+            content = process_image(uploaded_file)
+            file_type = "image"
+        else:
+            st.error("Unsupported file type.")
+            return
 
-            if file_type == "text":
-                st.success("File content successfully extracted.")
-                st.text_area("Extracted Text (Preview):", value=content[:500] + "...", height=200)
+        if file_type == "text" and content:
+            st.success("File content successfully extracted.")
+            st.text_area("Extracted Text (Preview):", value=content[:500] + "...", height=200)
 
-                # Continue with question generation as in the original implementation
-                st.info("Generating exam questions from the uploaded content. This may take a minute...")
-                chunks = chunk_text(content)
-                questions = []
-                for chunk in chunks:
-                    response, error = generate_mc_questions(chunk)
-                    if error:
-                        st.error(f"Error generating questions: {error}")
-                        break
-                    parsed_questions, parse_error = parse_generated_questions(response)
-                    if parse_error:
-                        st.error(parse_error)
-                        st.text_area("Full Response:", value=response, height=200)
-                        break
-                    if parsed_questions:
-                        questions.extend(parsed_questions)
-                        if len(questions) >= 20:
-                            questions = questions[:20]  # Limit to 20 questions
-                            break
-                if questions:
-                    st.session_state.generated_questions = questions
-                    st.session_state.content_text = content
-                    st.session_state.mc_test_generated = True
-                    st.success(f"Exam successfully generated with {len(questions)} questions!")
+            st.info("Generating exam questions from the uploaded content. This may take a minute...")
+            response, error = generate_mc_questions(content, system_prompt)
+            if error:
+                st.error(error)
+            else:
+                st.text_area("Generated Questions:", value=response, height=300)
+                st.download_button(
+                    label="Download Questions",
+                    data=response,
+                    file_name="questions_from_document.json",
+                    mime="application/json",
+                )
+        elif file_type == "image" and content:
+            st.image(uploaded_file, caption="Uploaded Image", use_column_width=True)
 
-                    # Display options to proceed
-                    col1, col2 = st.columns(2)
-                    with col1:
-                        if st.button("Take the Exam"):
-                            st.session_state.app_mode = "Take Exam"
-                            st.experimental_rerun()
-                    with col2:
-                        if st.button("Download Exam"):
-                            st.session_state.app_mode = "Download Exam"
-                            st.experimental_rerun()
-                else:
-                    st.error("No questions were generated. Please check the above error messages and try again.")
+            user_prompt = (
+                "Using the content derived from the uploaded image, create single-choice questions. "
+                "Ensure that each question is based on the image content and has exactly one correct answer. "
+                "Create as many questions as necessary to cover the entire content, but no more than 20 questions. "
+                "Provide the output in JSON format with the following structure: "
+                "[{'question': '...', 'choices': ['...'], 'correct_answer': '...', 'explanation': '...'}]. "
+                "Ensure the JSON is valid and properly formatted."
+            )
 
-            elif file_type == "image":
-                st.image(content, caption="Uploaded Image", use_column_width=True)
-                st.warning("Question generation from images is not supported in this version.")
+            response, error = get_questions_from_image(uploaded_file, system_prompt, user_prompt)
+            if error:
+                st.error(error)
+            else:
+                st.text_area("Generated Questions:", value=response, height=300)
+                st.download_button(
+                    label="Download Questions",
+                    data=response,
+                    file_name="questions_from_image.json",
+                    mime="application/json",
+                )
+        else:
+            st.error("Could not process the uploaded file.")
     else:
         st.warning("Please upload a file to generate an interactive exam.")
 
-# --------------------------- Main Application ---------------------------
-
 def main():
     """
-    The main function that controls the Streamlit app's flow.
+    Main function that controls the Streamlit app's flow.
     """
     st.title("📝 Exam Creator")
     st.markdown(f"**Version:** {__version__}")
 
-    if "app_mode" not in st.session_state:
-        st.session_state.app_mode = "Upload PDF & Generate Questions"
-
-    # Define app modes
-    app_mode_options = ["Upload PDF & Generate Questions", "Take Exam", "Download Exam"]
-    
-    # Sidebar for navigation
     st.sidebar.title("Navigation")
-    st.session_state.app_mode = st.sidebar.selectbox("Select App Mode", app_mode_options, index=app_mode_options.index(st.session_state.app_mode))
-
-    # Render the selected app mode
-    if st.session_state.app_mode == "Upload PDF & Generate Questions":
+    app_mode = st.sidebar.radio("Choose Mode", ["Upload PDF & Generate Questions"])
+    
+    if app_mode == "Upload PDF & Generate Questions":
         pdf_upload_app()
-    elif st.session_state.app_mode == "Take Exam":
-        if 'mc_test_generated' in st.session_state and st.session_state.mc_test_generated:
-            if 'generated_questions' in st.session_state and st.session_state.generated_questions:
-                mc_quiz_app()
-            else:
-                st.warning("No generated questions found. Please upload a file and generate questions first.")
-        else:
-            st.warning("Please upload a file and generate questions first.")
-    elif st.session_state.app_mode == "Download Exam":
-        if 'mc_test_generated' in st.session_state and st.session_state.mc_test_generated:
-            download_files_app()
-        else:
-            st.warning("Please upload a file and generate questions first.")
 
 if __name__ == '__main__':
     main()
