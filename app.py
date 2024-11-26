@@ -392,7 +392,7 @@ def generate_mc_questions(content, system_prompt):
     ]
     try:
         response = openai.ChatCompletion.create(
-            model="gpt-4o",
+            model="gpt-4o-mini",
             messages=messages,
             max_tokens=1500,
             temperature=0.7,
@@ -427,7 +427,7 @@ def get_questions_from_image(image, system_prompt, user_prompt):
         ]
 
         response = openai.ChatCompletion.create(
-            model="gpt-4o",
+            model="gpt-4o-mini",
             messages=messages,
             max_tokens=1500,
             temperature=0.7,
