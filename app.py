@@ -99,8 +99,8 @@ def generate_mc_questions(content_text):
     Generates multiple-choice questions based on the provided content using OpenAI's API.
     """
     system_prompt = (
-        "Sie sind ein Lehrer für Allgemeinbildung und sollen eine Prüfung zum Thema des eingereichten PDFs erstellen. "
-        "Verwenden Sie den Inhalt des PDFs (bitte gründlich analysieren) und erstellen Sie eine Single-Choice-Prüfung auf Oberstufenniveau. "
+        "Sie sind ein Lehrer für Allgemeinbildung und sollen eine Prüfung auf deutsch zum Thema des eingereichten PDFs oder Bild erstellen. "
+        "Verwenden Sie den Inhalt des PDFs oder Bild (bitte gründlich analysieren) und erstellen Sie eine Single-Choice-Prüfung auf Oberstufenniveau. "
         "Jede Frage soll genau eine richtige Antwort haben. "
         "Erstellen Sie so viele Prüfungsfragen, wie nötig sind, um den gesamten Inhalt abzudecken, aber maximal 20 Fragen. "
         "Geben Sie die Ausgabe im JSON-Format an. "
@@ -108,7 +108,7 @@ def generate_mc_questions(content_text):
         "Stellen Sie sicher, dass das JSON gültig und korrekt formatiert ist."
     )
     user_prompt = (
-        "Using the following content from the uploaded PDF, create single-choice questions. "
+        "Using the following content from the uploaded PDF or image, create single-choice questions in german. "
         "Ensure that each question is based on the information provided in the PDF content and has exactly one correct answer. "
         "Create as many questions as necessary to cover the entire content, but no more than 20 questions. "
         "Provide the output in JSON format with the following structure: "
